@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -26,11 +26,11 @@ class QueryEncoder(nn.Module):
         self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
 
     @staticmethod
-    def find_compound_span(sentence: str, compound: str) -> Optional[Tuple[int, int]]:
+    def find_compound_span(sentence: str, compound: str) -> Tuple[int, int]:
         """Case-insensitive character offset of compound in sentence."""
         start = sentence.lower().find(compound.lower())
         if start == -1:
-            return None
+            raise ValueError(f"compound not found in sentence: {compound}")
         return start, start + len(compound)
 
     @staticmethod
@@ -54,17 +54,12 @@ class QueryEncoder(nn.Module):
     def target_span_pool(
         hidden_states: torch.Tensor,
         offset_mapping: torch.Tensor,
-        spans: List[Optional[Tuple[int, int]]],
-        fallback_vectors: torch.Tensor,
+        spans: List[Tuple[int, int]],
     ) -> torch.Tensor:
-        """Mean pool over tokens overlapping the compound span, falls back to Q_sentence."""
+        """Mean pool over tokens overlapping the compound span."""
         batch_vectors: list[torch.Tensor] = []
 
         for batch_idx, span in enumerate(spans):
-            if span is None:
-                batch_vectors.append(fallback_vectors[batch_idx])
-                continue
-
             target_start, target_end = span
             token_vectors: list[torch.Tensor] = []
 
@@ -81,9 +76,9 @@ class QueryEncoder(nn.Module):
                     token_vectors.append(hidden_states[batch_idx, token_idx])
 
             if len(token_vectors) == 0:
-                batch_vectors.append(fallback_vectors[batch_idx])
-            else:
-                batch_vectors.append(torch.stack(token_vectors).mean(dim=0))
+                raise ValueError("No tokenizer tokens overlap the compound span.")
+
+            batch_vectors.append(torch.stack(token_vectors).mean(dim=0))
 
         return torch.stack(batch_vectors)
 
@@ -96,8 +91,6 @@ class QueryEncoder(nn.Module):
             self.find_compound_span(sentence, compound)
             for sentence, compound in zip(sentences, compounds)
         ]
-        spans_found = sum(span is not None for span in spans)
-
         encoded = self.tokenizer(
             sentences,
             padding=True,
@@ -124,30 +117,20 @@ class QueryEncoder(nn.Module):
             hidden_states=hidden_states,
             offset_mapping=offset_mapping,
             spans=spans,
-            fallback_vectors=q_sentence,
         )
 
         q_raw = torch.cat([q_sentence, q_target], dim=-1)
         q = self.projection(q_raw)
 
-        if self.config.normalize:
-            q = F.normalize(q, p=2, dim=-1)
+        q = F.normalize(q, p=2, dim=-1)
 
         if self.config.debug:
-            missing_compounds = [
-                compound
-                for compound, span in zip(compounds, spans)
-                if span is None
-            ]
             print(
                 "[QueryEncoder] "
                 f"device={q.device} "
                 f"batch={len(sentences)} "
-                f"compound_spans_found={spans_found}/{len(spans)}"
+                f"compound_spans={len(spans)}"
             )
             print("[QueryEncoder] sentence encoded, target pooled, combined into Q")
-
-            if missing_compounds:
-                print(f"[QueryEncoder] missing_compounds={missing_compounds}")
 
         return q

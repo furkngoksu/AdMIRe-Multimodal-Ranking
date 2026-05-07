@@ -24,10 +24,7 @@ class ImageEncoder(nn.Module):
         self.config = config
         self.encoder = SentenceTransformer(config.model_name)
 
-        if hasattr(self.encoder, "get_embedding_dimension"):
-            raw_dim = self.encoder.get_embedding_dimension()
-        else:
-            raw_dim = self.encoder.get_sentence_embedding_dimension()
+        raw_dim = self.encoder.get_sentence_embedding_dimension()
         if raw_dim is None:
             raise ValueError("Could not infer image embedding dimension.")
 
@@ -37,10 +34,9 @@ class ImageEncoder(nn.Module):
                 self.projection.weight.copy_(torch.eye(raw_dim))
                 self.projection.bias.zero_()
 
-        if config.freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-            self.encoder.eval()
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        self.encoder.eval()
 
     @staticmethod
     def flatten_images(images: List[List[ImageInput]]) -> tuple[List[ImageInput], int, int]:
@@ -80,12 +76,6 @@ class ImageEncoder(nn.Module):
 
         device = next(self.projection.parameters()).device
 
-        if not self.config.freeze_encoder:
-            raise NotImplementedError(
-                "ImageEncoder currently supports a frozen SentenceTransformer "
-                "encoder. Keep freeze_encoder=True for this I block implementation."
-            )
-
         with torch.no_grad():
             raw_embeddings = self.encoder.encode(
                 pil_images,
@@ -96,10 +86,7 @@ class ImageEncoder(nn.Module):
 
         raw_embeddings = raw_embeddings.to(device)
         i = self.projection(raw_embeddings)
-
-        if self.config.normalize:
-            i = F.normalize(i, p=2, dim=-1)
-
+        i = F.normalize(i, p=2, dim=-1)
         i = i.view(batch_size, num_candidates, self.config.shared_dim)
 
         if self.config.debug:

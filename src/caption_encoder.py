@@ -19,13 +19,9 @@ class CaptionEncoder(nn.Module):
         self.config = config
         self.encoder = SentenceTransformer(config.model_name)
 
-        if hasattr(self.encoder, "max_seq_length"):
-            self.encoder.max_seq_length = config.max_length
+        self.encoder.max_seq_length = config.max_length
 
-        if hasattr(self.encoder, "get_embedding_dimension"):
-            raw_dim = self.encoder.get_embedding_dimension()
-        else:
-            raw_dim = self.encoder.get_sentence_embedding_dimension()
+        raw_dim = self.encoder.get_sentence_embedding_dimension()
         if raw_dim is None:
             raise ValueError("Could not infer sentence embedding dimension.")
 
@@ -35,10 +31,9 @@ class CaptionEncoder(nn.Module):
                 self.projection.weight.copy_(torch.eye(raw_dim))
                 self.projection.bias.zero_()
 
-        if config.freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-            self.encoder.eval()
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        self.encoder.eval()
 
     @staticmethod
     def flatten_captions(captions: List[List[str]]) -> tuple[List[str], int, int]:
@@ -67,12 +62,6 @@ class CaptionEncoder(nn.Module):
 
         device = next(self.projection.parameters()).device
 
-        if not self.config.freeze_encoder:
-            raise NotImplementedError(
-                "CaptionEncoder currently supports a frozen SentenceTransformer "
-                "encoder. Keep freeze_encoder=True for this T block implementation."
-            )
-
         with torch.no_grad():
             raw_embeddings = self.encoder.encode(
                 flat_captions,
@@ -83,10 +72,7 @@ class CaptionEncoder(nn.Module):
 
         raw_embeddings = raw_embeddings.to(device)
         t = self.projection(raw_embeddings)
-
-        if self.config.normalize:
-            t = F.normalize(t, p=2, dim=-1)
-
+        t = F.normalize(t, p=2, dim=-1)
         t = t.view(batch_size, num_candidates, self.config.shared_dim)
 
         if self.config.debug:

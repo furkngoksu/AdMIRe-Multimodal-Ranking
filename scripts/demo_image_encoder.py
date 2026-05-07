@@ -21,8 +21,6 @@ def main() -> None:
     config = ImageEncoderConfig(
         model_name="sentence-transformers/clip-ViT-B-32",
         shared_dim=512,
-        normalize=True,
-        freeze_encoder=True,
         debug=True,
     )
 

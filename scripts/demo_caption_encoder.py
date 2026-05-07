@@ -17,8 +17,6 @@ def main() -> None:
         model_name="sentence-transformers/clip-ViT-B-32-multilingual-v1",
         shared_dim=512,
         max_length=128,
-        normalize=True,
-        freeze_encoder=True,
         debug=True,
     )
 

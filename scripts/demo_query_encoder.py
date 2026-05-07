@@ -17,7 +17,6 @@ def main() -> None:
         model_name="xlm-roberta-base",
         shared_dim=512,
         max_length=128,
-        normalize=True,
         debug=True,
     )
 
