@@ -20,3 +20,12 @@ class CaptionEncoderConfig:
     normalize: bool = True
     freeze_encoder: bool = True
     debug: bool = False
+
+
+@dataclass(frozen=True)
+class ImageEncoderConfig:
+    model_name: str = "sentence-transformers/clip-ViT-B-32"
+    shared_dim: int = 512
+    normalize: bool = True
+    freeze_encoder: bool = True
+    debug: bool = False

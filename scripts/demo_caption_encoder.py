@@ -47,13 +47,13 @@ def main() -> None:
 
     expected_shape = (2, 5, config.shared_dim)
     if tuple(t.shape) != expected_shape:
-        raise RuntimeError(f"Unexpected T shape: {tuple(t.shape)}")
+        raise RuntimeError(f"Unexpected caption vector shape: {tuple(t.shape)}")
 
     norms = t.norm(dim=-1)
     if not torch.allclose(norms, torch.ones_like(norms), atol=1e-4):
-        raise RuntimeError("T vectors are not L2-normalized.")
+        raise RuntimeError("Caption vectors are not L2-normalized.")
 
-    print("T block demo finished.")
+    print("Caption vector demo finished.")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from src.config import CaptionEncoderConfig
 
 
 class CaptionEncoder(nn.Module):
-    """Encodes candidate captions into T representations."""
+    """Encodes candidate captions into caption vectors."""
 
     def __init__(self, config: CaptionEncoderConfig = CaptionEncoderConfig()) -> None:
         super().__init__()
@@ -62,7 +62,7 @@ class CaptionEncoder(nn.Module):
         return flat_captions, batch_size, num_candidates
 
     def forward(self, captions: List[List[str]]) -> torch.Tensor:
-        """Encode candidate captions into a tensor with shape [B, K, shared_dim]."""
+        """Encode candidate captions into caption vectors [B, K, shared_dim]."""
         flat_captions, batch_size, num_candidates = self.flatten_captions(captions)
 
         device = next(self.projection.parameters()).device
@@ -96,5 +96,8 @@ class CaptionEncoder(nn.Module):
                 f"captions_encoded={len(flat_captions)} device={t.device}"
             )
             print("[CaptionEncoder] captions -> T")
+            preview = t[0, 0, :6].detach().cpu().tolist()
+            preview = [round(value, 4) for value in preview]
+            print(f"[CaptionEncoder] first caption vector preview={preview}")
 
         return t

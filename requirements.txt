@@ -2,3 +2,4 @@ torch
 transformers
 sentencepiece
 sentence-transformers
+pillow
