@@ -135,4 +135,3 @@ dmypy.json
 # Large data files
 admire2_training/
 admire2_submission/
-*.markdown
