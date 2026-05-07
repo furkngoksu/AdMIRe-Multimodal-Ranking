@@ -135,3 +135,14 @@ dmypy.json
 # Large data files
 admire2_training/
 admire2_submission/
+
+# Generated project outputs
+outputs/*
+!outputs/.gitkeep
+
+# Image artifacts
+*.jpg
+*.jpeg
+
+# Document artifacts
+*.pdf
