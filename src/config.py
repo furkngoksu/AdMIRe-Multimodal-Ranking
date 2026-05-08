@@ -15,6 +15,11 @@ class PipelineDataConfig:
 
 
 @dataclass(frozen=True)
+class WeightsConfig:
+    ranking_weights_path: str = "checkpoints/ranking.pt"
+
+
+@dataclass(frozen=True)
 class QueryEncoderConfig:
     model_name: str = "xlm-roberta-base"
     shared_dim: int = 512
@@ -38,6 +43,7 @@ class ImageEncoderConfig:
 
 
 PIPELINE_DATA_CONFIG = PipelineDataConfig()
+WEIGHTS_CONFIG = WeightsConfig()
 
 
 def get_device() -> torch.device:

@@ -140,6 +140,10 @@ admire2_submission/
 outputs/*
 !outputs/.gitkeep
 
+# Trained weights
+checkpoints/*
+!checkpoints/.gitkeep
+
 # Image artifacts
 *.jpg
 *.jpeg

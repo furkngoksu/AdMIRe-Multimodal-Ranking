@@ -25,11 +25,10 @@ class CaptionEncoder(nn.Module):
         if raw_dim is None:
             raise ValueError("Could not infer sentence embedding dimension.")
 
-        self.projection = nn.Linear(raw_dim, config.shared_dim)
-        if raw_dim == config.shared_dim:
-            with torch.no_grad():
-                self.projection.weight.copy_(torch.eye(raw_dim))
-                self.projection.bias.zero_()
+        if raw_dim != config.shared_dim:
+            raise ValueError(
+                f"Expected caption embedding dim {config.shared_dim}, got {raw_dim}."
+            )
 
         for param in self.encoder.parameters():
             param.requires_grad = False
@@ -60,7 +59,7 @@ class CaptionEncoder(nn.Module):
         """Encode candidate captions into caption vectors [B, K, shared_dim]."""
         flat_captions, batch_size, num_candidates = self.flatten_captions(captions)
 
-        device = next(self.projection.parameters()).device
+        device = next(self.encoder.parameters()).device
 
         with torch.no_grad():
             raw_embeddings = self.encoder.encode(
@@ -71,8 +70,7 @@ class CaptionEncoder(nn.Module):
             )
 
         raw_embeddings = raw_embeddings.to(device)
-        t = self.projection(raw_embeddings)
-        t = F.normalize(t, p=2, dim=-1)
+        t = F.normalize(raw_embeddings, p=2, dim=-1)
         t = t.view(batch_size, num_candidates, self.config.shared_dim)
 
         if self.config.debug:

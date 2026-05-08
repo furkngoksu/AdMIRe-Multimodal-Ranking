@@ -66,13 +66,15 @@ This keeps the candidate-side image and caption representations compatible.
 
 ## Representation
 
-The image is encoded using the CLIP ViT-B/32 image encoder. The raw image
-embedding is projected into the shared 512-dimensional space and L2-normalized.
+The image is encoded using the CLIP ViT-B/32 image encoder. This encoder already
+returns a 512-dimensional representation aligned with the multilingual CLIP text
+space used by the T block, so no extra trainable projection is used. The output
+is L2-normalized.
 
 Formula:
 
 ```text
-I_i = normalize(W_I * ImageEncoder(image_i))
+I_i = normalize(ImageEncoder(image_i))
 ```
 
 ## Shape
@@ -91,8 +93,7 @@ Output: I      = [B, 5, 512]
 | Input | Candidate images |
 | Encoder | `sentence-transformers/clip-ViT-B-32` |
 | Encoder freeze | Yes |
-| Projection | raw_dim -> 512 |
-| Identity initialization | Yes, if raw_dim = 512 |
+| Projection | No |
 | Normalize | Yes |
 | Output shape | `[B, 5, 512]` |
 
@@ -103,7 +104,7 @@ T block uses a multilingual CLIP-compatible text encoder aligned with CLIP
 ViT-B/32 image vectors, the I block uses the corresponding CLIP ViT-B/32 image
 encoder.
 
-The encoder is frozen for stability, while the projection layer remains
-trainable. If the raw image embedding dimension is already 512, the projection
-layer starts as identity so the pretrained CLIP image space is preserved at the
-beginning of training.
+The image encoder already maps images into the CLIP-aligned 512-dimensional
+candidate space. Adding a trainable 512 -> 512 projection would introduce extra
+parameters and can disturb the pretrained image-caption alignment, so the I
+block keeps the encoder output directly.

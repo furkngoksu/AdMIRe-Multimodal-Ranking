@@ -22,6 +22,10 @@ class QueryEncoder(nn.Module):
         )
         self.encoder = AutoModel.from_pretrained(config.model_name)
 
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        self.encoder.eval()
+
         hidden_dim = self.encoder.config.hidden_size
         self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
 
