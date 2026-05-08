@@ -1,0 +1,151 @@
+{
+  "total_rows": 5370,
+  "labels": {
+    "0": {
+      "count": 2931,
+      "percent": 54.58100558659218
+    },
+    "1": {
+      "count": 2439,
+      "percent": 45.41899441340782
+    }
+  },
+  "languages": {
+    "EN": {
+      "count": 3880,
+      "percent": 72.25325884543761
+    },
+    "PT": {
+      "count": 1490,
+      "percent": 27.746741154562383
+    }
+  },
+  "language_label": {
+    "EN": {
+      "0": {
+        "count": 1976,
+        "percent": 50.92783505154639
+      },
+      "1": {
+        "count": 1904,
+        "percent": 49.07216494845361
+      },
+      "total": 3880
+    },
+    "PT": {
+      "0": {
+        "count": 955,
+        "percent": 64.09395973154362
+      },
+      "1": {
+        "count": 535,
+        "percent": 35.90604026845637
+      },
+      "total": 1490
+    }
+  },
+  "mwe": {
+    "unique_count": 336,
+    "empty_count": 0,
+    "mixed_label_mwe_count": 163,
+    "top_20": {
+      "information age": {
+        "count": 34,
+        "percent": 0.633147113594041
+      },
+      "brass ring": {
+        "count": 32,
+        "percent": 0.595903165735568
+      },
+      "fresh water": {
+        "count": 31,
+        "percent": 0.5772811918063314
+      },
+      "fairy tale": {
+        "count": 31,
+        "percent": 0.5772811918063314
+      },
+      "peace talk": {
+        "count": 31,
+        "percent": 0.5772811918063314
+      },
+      "music festival": {
+        "count": 29,
+        "percent": 0.5400372439478585
+      },
+      "radioactive material": {
+        "count": 28,
+        "percent": 0.521415270018622
+      },
+      "rat race": {
+        "count": 28,
+        "percent": 0.521415270018622
+      },
+      "damp squib": {
+        "count": 27,
+        "percent": 0.5027932960893855
+      },
+      "baby blues": {
+        "count": 27,
+        "percent": 0.5027932960893855
+      },
+      "smoking jacket": {
+        "count": 27,
+        "percent": 0.5027932960893855
+      },
+      "small fry": {
+        "count": 26,
+        "percent": 0.48417132216014896
+      },
+      "guilt trip": {
+        "count": 26,
+        "percent": 0.48417132216014896
+      },
+      "best man": {
+        "count": 26,
+        "percent": 0.48417132216014896
+      },
+      "dust storm": {
+        "count": 26,
+        "percent": 0.48417132216014896
+      },
+      "pipe dream": {
+        "count": 25,
+        "percent": 0.4655493482309125
+      },
+      "graveyard shift": {
+        "count": 25,
+        "percent": 0.4655493482309125
+      },
+      "acid test": {
+        "count": 25,
+        "percent": 0.4655493482309125
+      },
+      "big cheese": {
+        "count": 25,
+        "percent": 0.4655493482309125
+      },
+      "ghost town": {
+        "count": 25,
+        "percent": 0.4655493482309125
+      }
+    }
+  },
+  "target": {
+    "unique_count": 5370,
+    "unique_percent": 100.0,
+    "empty_count": 0,
+    "mwe_found_count": 5272,
+    "mwe_found_percent": 98.17504655493482,
+    "avg_words": 26.414152700186218,
+    "min_words": 3,
+    "max_words": 119,
+    "avg_chars": 157.54469273743015
+  },
+  "missing": {
+    "language": 0,
+    "mwe": 0,
+    "target": 0,
+    "label": 0
+  }
+}

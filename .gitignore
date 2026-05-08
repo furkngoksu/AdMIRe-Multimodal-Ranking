@@ -140,6 +140,11 @@ admire2_submission/
 outputs/*
 !outputs/.gitkeep
 
+# Stage 1 local artifacts
+/unique_mwe_target_label_language.csv
+stage1_idiom_signal/runs/*
+!stage1_idiom_signal/runs/.gitkeep
+
 # Trained weights
 checkpoints/*
 !checkpoints/.gitkeep
