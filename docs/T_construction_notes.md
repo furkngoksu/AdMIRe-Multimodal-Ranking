@@ -44,14 +44,15 @@ Q' with C_i
 
 ## Representation
 
-The caption is encoded using a multilingual CLIP-compatible text encoder. The
-raw caption embedding is projected into the shared 512-dimensional space and
+The caption is encoded using a multilingual CLIP-compatible text encoder. This
+encoder already returns a 512-dimensional representation aligned with the CLIP
+ViT-B/32 image space, so no extra trainable projection is used. The output is
 L2-normalized.
 
 Formula:
 
 ```text
-T_i = normalize(W_T * TextEncoder(caption_i))
+T_i = normalize(TextEncoder(caption_i))
 ```
 
 ## Encoder Choice
@@ -97,7 +98,7 @@ Output: T        = [B, 5, 512]
 | Encoder | Multilingual CLIP-compatible text encoder |
 | Default model | `sentence-transformers/clip-ViT-B-32-multilingual-v1` |
 | Encoder freeze | Yes |
-| Projection | raw_dim -> 512 |
+| Projection | No |
 | Normalize | Yes |
 | Output shape | `[B, 5, 512]` |
 
@@ -107,10 +108,7 @@ Candidate representations are built from both images and captions. Since the
 image branch will use a CLIP/SigLIP-style vision-language encoder, the caption
 branch should also use a compatible text encoder.
 
-Freezing the caption encoder is safer for a small dataset, while the projection
-layer remains trainable to adapt the caption embeddings to the shared ranking
-space.
-
-When the raw caption embedding dimension is already 512, the projection layer is
-initialized as identity. This keeps the pretrained CLIP-aligned caption space
-intact at the start, while still allowing the projection to be trained later.
+The caption encoder already maps captions into the CLIP-aligned 512-dimensional
+candidate space. Adding a trainable 512 -> 512 projection would introduce extra
+parameters and can disturb the pretrained image-text alignment, so the T block
+keeps the encoder output directly.

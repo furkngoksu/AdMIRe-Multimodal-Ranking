@@ -5,12 +5,13 @@ import torch
 from src import data
 from src.candidate_fusion import GatedCandidateFusion
 from src.caption_encoder import CaptionEncoder
-from src.config import get_device
+from src.config import WEIGHTS_CONFIG, get_device
 from src.idiom_signal import IdiomSignal
 from src.image_encoder import ImageEncoder
 from src.query_encoder import QueryEncoder
 from src.query_fusion import QueryFusion
 from src.ranker import CosineRanker, build_prediction_records
+from src.weights import load_weights
 
 
 def main() -> None:
@@ -24,6 +25,19 @@ def main() -> None:
     candidate_fusion = GatedCandidateFusion().to(device).eval()
     query_fusion = QueryFusion().to(device).eval()
     ranker = CosineRanker().to(device).eval()
+
+    modules = {
+        "query_projection": query_encoder.projection,
+        "idiom_signal": idiom_signal,
+        "candidate_fusion": candidate_fusion,
+        "query_fusion": query_fusion,
+    }
+
+    load_weights(
+        modules=modules,
+        path=WEIGHTS_CONFIG.ranking_weights_path,
+        device=device,
+    )
 
     with torch.no_grad():
         for batch in loader:
