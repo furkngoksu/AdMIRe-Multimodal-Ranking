@@ -146,3 +146,4 @@ outputs/*
 
 # Document artifacts
 *.pdf
+readme.md
