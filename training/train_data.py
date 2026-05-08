@@ -33,6 +33,29 @@ def build_gold_labels(
     return order_indices, relevance
 
 
+def resolve_compound_dir(image_root: str | Path, compound: str) -> Path:
+    """Resolve compound folder, including apostrophe-to-underscore dataset naming."""
+    root = Path(image_root)
+
+    direct = root / compound
+    if direct.exists():
+        return direct
+
+    underscored = root / compound.replace("'s", "_s").replace("'", "_")
+    if underscored.exists():
+        return underscored
+
+    raise FileNotFoundError(f"Could not find compound folder: {root / compound}")
+
+
+def resolve_image_path(image_root: str | Path, compound: str, image_name: str) -> str:
+    image_path = resolve_compound_dir(image_root, compound) / image_name
+    if not image_path.exists():
+        raise FileNotFoundError(f"Could not find image file: {image_path}")
+
+    return str(image_path)
+
+
 def build_train_sample(
     row: dict[str, str],
     row_index: int,
@@ -42,7 +65,6 @@ def build_train_sample(
     num_candidates: int = 5,
 ) -> dict[str, Any]:
     compound = row["compound"]
-    compound_dir = Path(image_root) / compound
 
     candidate_names: list[str] = []
     captions: list[str] = []
@@ -52,7 +74,7 @@ def build_train_sample(
         image_name = row[f"image{idx}_name"]
         candidate_names.append(image_name)
         captions.append(row[f"image{idx}_caption"])
-        image_paths.append(str(compound_dir / image_name))
+        image_paths.append(resolve_image_path(image_root, compound, image_name))
 
     expected_order = parse_expected_order(row["expected_order"])
     gold_order_indices, gold_relevance = build_gold_labels(
