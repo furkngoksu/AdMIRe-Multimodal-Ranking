@@ -235,8 +235,11 @@ def load_idiom_signal(
     except TypeError:
         checkpoint = torch.load(checkpoint_path, map_location=resolved_device)
 
-    state_dict = checkpoint.get("model_state_dict", checkpoint)
-    model.load_state_dict(state_dict)
+    if "classifier_state_dict" in checkpoint:
+        model.classifier.load_state_dict(checkpoint["classifier_state_dict"])
+    else:
+        state_dict = checkpoint.get("model_state_dict", checkpoint)
+        model.load_state_dict(state_dict)
     model.to(resolved_device)
     model.eval()
 

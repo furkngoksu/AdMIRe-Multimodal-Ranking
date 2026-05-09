@@ -42,6 +42,12 @@ class ImageEncoderConfig:
     debug: bool = False
 
 
+@dataclass(frozen=True)
+class QueryFusionConfig:
+    shared_dim: int = 512
+    m_embedding_dim: int = 32
+
+
 PIPELINE_DATA_CONFIG = PipelineDataConfig()
 WEIGHTS_CONFIG = WeightsConfig()
 

@@ -24,7 +24,7 @@ class ImageEncoder(nn.Module):
         self.config = config
         self.encoder = SentenceTransformer(config.model_name)
 
-        raw_dim = self.encoder.get_sentence_embedding_dimension()
+        raw_dim = self.encoder.get_embedding_dimension()
         if raw_dim is None:
             raise ValueError("Could not infer image embedding dimension.")
 

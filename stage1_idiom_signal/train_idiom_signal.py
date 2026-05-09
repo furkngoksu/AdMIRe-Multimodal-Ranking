@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import json
 import random
@@ -10,6 +9,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from tqdm.auto import tqdm
 from torch.utils.data import DataLoader, Dataset, Subset
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +20,17 @@ from src.idiom_signal import IdiomSignalModel, build_idiom_input
 
 
 REQUIRED_COLUMNS = {"Language", "MWE", "Target", "Label"}
+
+CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
+OUTPUT_DIR = REPO_ROOT / "outputs/idiom_signal_40ep"
+MODEL_NAME = "xlm-roberta-base"
+EPOCHS = 40
+BATCH_SIZE = 16
+LEARNING_RATE = 1e-4
+MAX_LENGTH = 128
+VAL_RATIO = 0.15
+SEED = 42
+FREEZE_ENCODER = True
 
 
 class IdiomCsvDataset(Dataset):
@@ -103,7 +114,7 @@ def split_train_val(
     seed: int,
 ) -> tuple[list[int], list[int]]:
     if not 0.0 <= val_ratio < 1.0:
-        raise ValueError("--val_ratio must be in [0, 1).")
+        raise ValueError("val_ratio must be in [0, 1).")
 
     indices = list(range(len(labels)))
     if val_ratio == 0.0 or len(indices) < 2:
@@ -228,7 +239,13 @@ def evaluate(
     all_labels: list[float] = []
 
     with torch.no_grad():
-        for batch in loader:
+        progress = tqdm(
+            loader,
+            desc="val",
+            leave=False,
+            dynamic_ncols=True,
+        )
+        for batch in progress:
             model_inputs, labels = move_batch_to_device(batch=batch, device=device)
             logits = model(**model_inputs).squeeze(-1)
             loss = criterion(logits, labels)
@@ -240,6 +257,8 @@ def evaluate(
             probabilities = torch.sigmoid(logits).detach().cpu().tolist()
             all_probabilities.extend(float(value) for value in probabilities)
             all_labels.extend(float(value) for value in labels.detach().cpu().tolist())
+
+            progress.set_postfix(loss=f"{loss.item():.4f}")
 
     metrics = compute_metrics(probabilities=all_probabilities, labels=all_labels)
     metrics["loss"] = total_loss / max(1, total_examples)
@@ -260,69 +279,53 @@ def save_checkpoint(
     torch.save(
         {
             "epoch": epoch,
-            "model_state_dict": model.state_dict(),
+            "classifier_state_dict": model.classifier.state_dict(),
             "metrics": metrics,
         },
         output_dir / "idiom_signal.pt",
     )
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train Stage 1 idiomaticity module M.")
-    parser.add_argument("--csv_path", required=True, help="Path to idiom CSV file.")
-    parser.add_argument("--output_dir", required=True, help="Directory for saved model files.")
-    parser.add_argument("--model_name", default="xlm-roberta-base")
-    parser.add_argument("--epochs", type=int, default=5)
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--max_length", type=int, default=128)
-    parser.add_argument("--val_ratio", type=float, default=0.15)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--unfreeze-encoder", action="store_true")
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
-    if args.epochs < 1:
-        raise ValueError("--epochs must be at least 1.")
-    if args.batch_size < 1:
-        raise ValueError("--batch_size must be at least 1.")
+    if EPOCHS < 1:
+        raise ValueError("EPOCHS must be at least 1.")
+    if BATCH_SIZE < 1:
+        raise ValueError("BATCH_SIZE must be at least 1.")
 
-    set_seed(args.seed)
+    set_seed(SEED)
 
-    output_dir = Path(args.output_dir)
+    output_dir = OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset = IdiomCsvDataset(args.csv_path)
+    dataset = IdiomCsvDataset(CSV_PATH)
     train_indices, val_indices = split_train_val(
         labels=dataset.labels,
-        val_ratio=args.val_ratio,
-        seed=args.seed,
+        val_ratio=VAL_RATIO,
+        seed=SEED,
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = IdiomSignalModel(
-        model_name=args.model_name,
-        freeze_encoder=not args.unfreeze_encoder,
+        model_name=MODEL_NAME,
+        freeze_encoder=FREEZE_ENCODER,
     ).to(device)
 
     collate_fn = lambda batch: collate_idiom_batch(
         batch=batch,
         tokenizer=model.tokenizer,
-        max_length=args.max_length,
+        max_length=MAX_LENGTH,
     )
 
     train_loader = DataLoader(
         Subset(dataset, train_indices),
-        batch_size=args.batch_size,
+        batch_size=BATCH_SIZE,
         shuffle=True,
         collate_fn=collate_fn,
     )
     val_loader = (
         DataLoader(
             Subset(dataset, val_indices),
-            batch_size=args.batch_size,
+            batch_size=BATCH_SIZE,
             shuffle=False,
             collate_fn=collate_fn,
         )
@@ -331,13 +334,13 @@ def main() -> None:
     )
 
     config = {
-        "model_name": args.model_name,
-        "max_length": args.max_length,
+        "model_name": MODEL_NAME,
+        "max_length": MAX_LENGTH,
         "dropout": model.dropout,
-        "encoder_frozen_during_training": not args.unfreeze_encoder,
+        "encoder_frozen_during_training": FREEZE_ENCODER,
         "train_size": len(train_indices),
         "val_size": len(val_indices),
-        "seed": args.seed,
+        "seed": SEED,
     }
     save_json(output_dir / "config.json", config)
     model.tokenizer.save_pretrained(output_dir / "tokenizer")
@@ -345,7 +348,7 @@ def main() -> None:
     trainable_parameters = [
         parameter for parameter in model.parameters() if parameter.requires_grad
     ]
-    optimizer = torch.optim.AdamW(trainable_parameters, lr=args.lr)
+    optimizer = torch.optim.AdamW(trainable_parameters, lr=LEARNING_RATE)
     criterion = nn.BCEWithLogitsLoss()
 
     history: list[dict[str, Any]] = []
@@ -353,16 +356,23 @@ def main() -> None:
     best_epoch = 0
 
     print(
-        f"Loaded {len(dataset)} rows; train={len(train_indices)} val={len(val_indices)} "
-        f"device={device} encoder_frozen={not args.unfreeze_encoder}"
+        f"Loaded {len(dataset)} rows from {CSV_PATH}; "
+        f"train={len(train_indices)} val={len(val_indices)} "
+        f"device={device} encoder_frozen={FREEZE_ENCODER}"
     )
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, EPOCHS + 1):
         model.train()
         total_train_loss = 0.0
         total_train_examples = 0
 
-        for batch in train_loader:
+        progress = tqdm(
+            train_loader,
+            desc=f"train epoch {epoch}/{EPOCHS}",
+            leave=False,
+            dynamic_ncols=True,
+        )
+        for batch in progress:
             model_inputs, labels = move_batch_to_device(batch=batch, device=device)
 
             optimizer.zero_grad(set_to_none=True)
@@ -374,6 +384,8 @@ def main() -> None:
             batch_size = labels.size(0)
             total_train_loss += float(loss.item()) * batch_size
             total_train_examples += batch_size
+
+            progress.set_postfix(loss=f"{loss.item():.4f}")
 
         train_loss = total_train_loss / max(1, total_train_examples)
         epoch_metrics: dict[str, Any] = {
@@ -404,7 +416,7 @@ def main() -> None:
             roc_auc = val_metrics["roc_auc"]
             roc_auc_text = "NA" if roc_auc is None else f"{roc_auc:.4f}"
             print(
-                f"epoch={epoch}/{args.epochs} "
+                f"epoch={epoch}/{EPOCHS} "
                 f"train_loss={train_loss:.4f} "
                 f"val_loss={float(val_metrics['loss']):.4f} "
                 f"val_acc={float(val_metrics['accuracy']):.4f} "
@@ -419,7 +431,7 @@ def main() -> None:
                 metrics={"loss": None, "accuracy": None, "f1": None, "roc_auc": None},
             )
             best_epoch = epoch
-            print(f"epoch={epoch}/{args.epochs} train_loss={train_loss:.4f}")
+            print(f"epoch={epoch}/{EPOCHS} train_loss={train_loss:.4f}")
 
         history.append(epoch_metrics)
 

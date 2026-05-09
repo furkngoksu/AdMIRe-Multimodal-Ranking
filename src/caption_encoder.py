@@ -21,7 +21,7 @@ class CaptionEncoder(nn.Module):
 
         self.encoder.max_seq_length = config.max_length
 
-        raw_dim = self.encoder.get_sentence_embedding_dimension()
+        raw_dim = self.encoder.get_embedding_dimension()
         if raw_dim is None:
             raise ValueError("Could not infer sentence embedding dimension.")
 

@@ -19,6 +19,14 @@ def parse_expected_order(value: str) -> list[str]:
     return [str(name) for name in ast.literal_eval(value)]
 
 
+def read_m_scores(path: str | Path) -> dict[str, float]:
+    rows = read_tsv(path)
+    return {
+        row["sample_id"]: float(row["m_prob"])
+        for row in rows
+    }
+
+
 def build_gold_labels(
     candidate_names: list[str],
     expected_order: list[str],
@@ -62,9 +70,11 @@ def build_train_sample(
     image_root: str | Path,
     language: str,
     split: str,
+    m_scores: dict[str, float],
     num_candidates: int = 5,
 ) -> dict[str, Any]:
     compound = row["compound"]
+    sample_id = f"{language}_{split}_{row_index}"
 
     candidate_names: list[str] = []
     captions: list[str] = []
@@ -83,11 +93,12 @@ def build_train_sample(
     )
 
     return {
-        "sample_id": f"{language}_{split}_{row_index}",
+        "sample_id": sample_id,
         "language": language,
         "split": split,
         "sentence": row["sentence"],
         "compound": compound,
+        "m_prob": m_scores[sample_id],
         "sentence_type": row.get("sentence_type"),
         "candidate_names": candidate_names,
         "captions": captions,
@@ -103,6 +114,7 @@ def load_train_samples(
     image_root: str | Path,
     language: str,
     split: str,
+    m_scores: dict[str, float],
     num_candidates: int = 5,
 ) -> list[dict[str, Any]]:
     rows = read_tsv(tsv_path)
@@ -113,6 +125,7 @@ def load_train_samples(
             image_root=image_root,
             language=language,
             split=split,
+            m_scores=m_scores,
             num_candidates=num_candidates,
         )
         for row_index, row in enumerate(rows)
@@ -129,6 +142,10 @@ def collate_train_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "splits": [sample["split"] for sample in samples],
         "sentences": [sample["sentence"] for sample in samples],
         "compounds": [sample["compound"] for sample in samples],
+        "m_prob": torch.tensor(
+            [[sample["m_prob"]] for sample in samples],
+            dtype=torch.float,
+        ),
         "sentence_types": [sample["sentence_type"] for sample in samples],
         "candidate_names": [sample["candidate_names"] for sample in samples],
         "captions": [sample["captions"] for sample in samples],

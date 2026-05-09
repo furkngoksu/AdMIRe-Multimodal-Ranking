@@ -4,3 +4,4 @@ sentencepiece
 sentence-transformers
 pillow
 scikit-learn
+tqdm

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
+OUTPUT_JSON = REPO_ROOT / "stage1_idiom_signal/reports/dataset_distribution.json"
 
 
 def percent(part: int, total: int) -> float:
@@ -105,26 +113,11 @@ def analyze_csv(csv_path: str | Path) -> dict[str, Any]:
     }
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Analyze Stage 1 idiom CSV distribution.")
-    parser.add_argument(
-        "--csv_path",
-        default="stage1_idiom_signal/data/unique_mwe_target_label_language.csv",
-    )
-    parser.add_argument(
-        "--output_json",
-        default="stage1_idiom_signal/reports/dataset_distribution.json",
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
-    payload = analyze_csv(args.csv_path)
+    payload = analyze_csv(CSV_PATH)
 
-    output_path = Path(args.output_json)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as file:
+    OUTPUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    with OUTPUT_JSON.open("w", encoding="utf-8") as file:
         json.dump(payload, file, indent=2, ensure_ascii=False)
 
     print(json.dumps(payload, indent=2, ensure_ascii=False))
