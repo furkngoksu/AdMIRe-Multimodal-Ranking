@@ -37,6 +37,7 @@ class RankingExperimentConfig:
     query_projection: str
     m_embedding_dim: int
     seed: int
+    m_source: str = "predicted"  # "predicted", "oracle", or "none"
     epochs: int = 20
     batch_size: int = 4
     learning_rate: float = 1e-4
@@ -59,6 +60,7 @@ class CachedRankingDataset(Dataset):
             "t": self.payload["t"][index],
             "i": self.payload["i"][index],
             "m_prob": self.payload["m_prob"][index],
+            "m_oracle": self.payload["m_oracle"][index],
             "gold_relevance": self.payload["gold_relevance"][index],
             "gold_order": self.payload["gold_order"][index],
         }
@@ -185,6 +187,7 @@ def build_query_projection(
 
 def forward_scores(
     batch: dict[str, torch.Tensor],
+    m_source: str,
     query_projection: nn.Module,
     query_fusion: QueryFusion,
     candidate_fusion: GatedCandidateFusion,
@@ -192,12 +195,16 @@ def forward_scores(
     device: torch.device,
 ) -> torch.Tensor:
     q_raw = batch["q_raw"].to(device)
-    m_prob = batch["m_prob"].to(device)
+    if m_source == "oracle":
+        m_tensor = batch["m_oracle"].to(device)
+    else:
+        m_tensor = batch["m_prob"].to(device)
+        
     image_repr = batch["i"].to(device)
     caption_repr = batch["t"].to(device)
 
     q = F.normalize(query_projection(q_raw), p=2, dim=-1)
-    q_prime = query_fusion(q, m_prob)
+    q_prime = query_fusion(q, m_tensor)
     candidate_repr = candidate_fusion(image_repr, caption_repr)
 
     return ranker(q_prime, candidate_repr)
@@ -235,6 +242,7 @@ def train_one_epoch(
         optimizer.zero_grad(set_to_none=True)
         scores = forward_scores(
             batch=batch,
+            m_source=experiment.m_source,
             query_projection=query_projection,
             query_fusion=query_fusion,
             candidate_fusion=candidate_fusion,
@@ -256,6 +264,7 @@ def train_one_epoch(
 def evaluate(
     loader: DataLoader,
     split_name: str,
+    m_source: str,
     query_projection: nn.Module,
     query_fusion: QueryFusion,
     candidate_fusion: GatedCandidateFusion,
@@ -279,6 +288,7 @@ def evaluate(
 
             scores = forward_scores(
                 batch=batch,
+                m_source=m_source,
                 query_projection=query_projection,
                 query_fusion=query_fusion,
                 candidate_fusion=candidate_fusion,
@@ -381,6 +391,7 @@ def run_training(
         dev_metrics = evaluate(
             loader=loaders["dev"],
             split_name="dev",
+            m_source=experiment.m_source,
             query_projection=query_projection,
             query_fusion=query_fusion,
             candidate_fusion=candidate_fusion,
@@ -421,6 +432,7 @@ def run_training(
     test_metrics = evaluate(
         loader=loaders["test"],
         split_name="test",
+        m_source=experiment.m_source,
         query_projection=query_projection,
         query_fusion=query_fusion,
         candidate_fusion=candidate_fusion,
@@ -430,6 +442,7 @@ def run_training(
     xeval_metrics = evaluate(
         loader=loaders["xeval"],
         split_name="xeval",
+        m_source=experiment.m_source,
         query_projection=query_projection,
         query_fusion=query_fusion,
         candidate_fusion=candidate_fusion,
@@ -548,6 +561,7 @@ def run_ablation(
     query_projection: str,
     m_dims: tuple[int, ...],
     seeds: tuple[int, ...],
+    m_source: str = "predicted",
     epochs: int = 20,
     batch_size: int = 4,
     learning_rate: float = 1e-4,
@@ -580,6 +594,7 @@ def run_ablation(
                 query_projection=query_projection,
                 m_embedding_dim=m_dim,
                 seed=seed,
+                m_source=m_source,
                 epochs=epochs,
                 batch_size=batch_size,
                 learning_rate=learning_rate,
