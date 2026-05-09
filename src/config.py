@@ -16,7 +16,8 @@ class PipelineDataConfig:
 
 @dataclass(frozen=True)
 class WeightsConfig:
-    ranking_weights_path: str = "checkpoints/ranking.pt"
+    idiom_signal_dir: str = "stage1_idiom_signal/output"
+    ranking_weights_path: str = "ranking_experiments/m_dim_ablation_linear/output/m32/weights.pt"
 
 
 @dataclass(frozen=True)

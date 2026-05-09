@@ -153,8 +153,8 @@ class QueryEncoder(nn.Module):
 
         return torch.stack(batch_vectors)
 
-    def forward(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
-        """Encode sentence-compound pairs into query vectors [B, shared_dim]."""
+    def encode_raw(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
+        """Build [Q_sentence ; Q_target] before the final query projection."""
         if len(sentences) != len(compounds):
             raise ValueError("sentences and compounds must have the same length.")
 
@@ -191,6 +191,11 @@ class QueryEncoder(nn.Module):
         )
 
         q_raw = torch.cat([q_sentence, q_target], dim=-1)
+        return q_raw
+
+    def forward(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
+        """Encode sentence-compound pairs into query vectors [B, shared_dim]."""
+        q_raw = self.encode_raw(sentences=sentences, compounds=compounds)
         q = self.projection(q_raw)
 
         q = F.normalize(q, p=2, dim=-1)
@@ -200,7 +205,6 @@ class QueryEncoder(nn.Module):
                 "[QueryEncoder] "
                 f"device={q.device} "
                 f"batch={len(sentences)} "
-                f"compound_spans={len(spans)}"
             )
             print("[QueryEncoder] sentence encoded, target pooled, combined into Q")
 

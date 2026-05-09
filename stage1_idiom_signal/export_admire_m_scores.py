@@ -14,8 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 from src.idiom_signal import load_idiom_signal
 
 
-MODEL_DIR = REPO_ROOT / "outputs/idiom_signal_40ep"
-OUTPUT_TSV = REPO_ROOT / "outputs/m_scores/admire_train_scores.tsv"
+MODEL_DIR = REPO_ROOT / "stage1_idiom_signal/output"
+OUTPUT_TSV = REPO_ROOT / "stage1_idiom_signal/output/admire_train_scores.tsv"
 BATCH_SIZE = 32
 MAX_LENGTH = 128
 

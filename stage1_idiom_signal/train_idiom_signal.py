@@ -22,7 +22,7 @@ from src.idiom_signal import IdiomSignalModel, build_idiom_input
 REQUIRED_COLUMNS = {"Language", "MWE", "Target", "Label"}
 
 CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
-OUTPUT_DIR = REPO_ROOT / "outputs/idiom_signal_40ep"
+OUTPUT_DIR = REPO_ROOT / "stage1_idiom_signal/output"
 MODEL_NAME = "xlm-roberta-base"
 EPOCHS = 40
 BATCH_SIZE = 16

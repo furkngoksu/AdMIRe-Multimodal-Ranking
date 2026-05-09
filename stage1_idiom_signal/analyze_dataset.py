@@ -13,7 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
-OUTPUT_JSON = REPO_ROOT / "stage1_idiom_signal/reports/dataset_distribution.json"
+OUTPUT_JSON = REPO_ROOT / "stage1_idiom_signal/output/dataset_distribution.json"
 
 
 def percent(part: int, total: int) -> float:

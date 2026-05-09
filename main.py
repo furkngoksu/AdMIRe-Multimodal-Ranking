@@ -6,7 +6,7 @@ from src import data
 from src.candidate_fusion import GatedCandidateFusion
 from src.caption_encoder import CaptionEncoder
 from src.config import WEIGHTS_CONFIG, get_device
-from src.idiom_signal import IdiomSignal
+from src.idiom_signal import load_idiom_signal
 from src.image_encoder import ImageEncoder
 from src.query_encoder import QueryEncoder
 from src.query_fusion import QueryFusion
@@ -21,14 +21,16 @@ def main() -> None:
     query_encoder = QueryEncoder().to(device).eval()
     caption_encoder = CaptionEncoder().to(device).eval()
     image_encoder = ImageEncoder().to(device).eval()
-    idiom_signal = IdiomSignal().to(device).eval()
+    idiom_signal = load_idiom_signal(
+        output_dir=WEIGHTS_CONFIG.idiom_signal_dir,
+        device=device,
+    ).eval()
     candidate_fusion = GatedCandidateFusion().to(device).eval()
     query_fusion = QueryFusion().to(device).eval()
     ranker = CosineRanker().to(device).eval()
 
     modules = {
         "query_projection": query_encoder.projection,
-        "idiom_signal": idiom_signal,
         "candidate_fusion": candidate_fusion,
         "query_fusion": query_fusion,
     }
@@ -43,7 +45,12 @@ def main() -> None:
         for batch in loader:
             # Query side: sentence + compound -> Q, then M adjusts Q.
             q = query_encoder(batch["sentences"], batch["compounds"])
-            m = idiom_signal(batch["sentences"], batch["compounds"])
+            m = idiom_signal(
+                sentences=batch["sentences"],
+                mwes=batch["compounds"],
+                languages=batch["languages"],
+                return_probabilities=True,
+            )
             q_prime = query_fusion(q, m)
 
             # Candidate side: captions and images become candidate vectors.
