@@ -9,11 +9,11 @@ from ranking_experiments.runner import run_ablation
 
 if __name__ == "__main__":
     run_ablation(
-        family_name="oracle_ablation_pca",
-        query_projection="pca_frozen",
+        family_name="gold_m_ablation_linear",
+        query_projection="linear_trainable",
         m_dims=(0, 8, 16, 32, 64, 128, 256),
         seeds=(7, 13, 21, 42, 100),
-        m_source="oracle",
+        m_source="gold",
         epochs=20,
         batch_size=4,
     )

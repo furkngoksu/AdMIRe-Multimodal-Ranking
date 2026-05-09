@@ -32,7 +32,7 @@ def main():
         family_name="hyperparam_tuning/best_model",
         m_dims=(64,),
         seeds=SEEDS,
-        m_source="actual",
+        m_source="gold",
         fusion_type="concat",
         epochs=params["epochs"],
         batch_size=params["batch_size"],

@@ -17,7 +17,7 @@ class PipelineDataConfig:
 @dataclass(frozen=True)
 class WeightsConfig:
     idiom_signal_dir: str = "stage1_idiom_signal/output"
-    ranking_weights_path: str = "ranking_experiments/oracle_ablation_pca/output/m64/seed100/weights.pt"
+    ranking_weights_path: str = "ranking_experiments/gold_m_ablation_pca/output/m64/seed100/weights.pt"
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class ImageEncoderConfig:
 class QueryFusionConfig:
     shared_dim: int = 512
     m_embedding_dim: int = 64
-    fusion_type: str = "concat"  # "concat", "gated", "film"
+    fusion_type: str = "concat"  # "concat", "gated", "film", "film_full"
 
 
 PIPELINE_DATA_CONFIG = PipelineDataConfig()

@@ -125,7 +125,7 @@ def encode_split(
     t_batches: list[torch.Tensor] = []
     i_batches: list[torch.Tensor] = []
     m_prob_batches: list[torch.Tensor] = []
-    m_actual_batches: list[torch.Tensor] = []
+    m_gold_batches: list[torch.Tensor] = []
     relevance_batches: list[torch.Tensor] = []
     order_batches: list[torch.Tensor] = []
     sample_ids: list[str] = []
@@ -142,7 +142,7 @@ def encode_split(
             t_batches.append(caption_encoder(batch["captions"]).detach().cpu())
             i_batches.append(image_encoder(batch["image_paths"]).detach().cpu())
             m_prob_batches.append(batch["m_prob"].detach().cpu())
-            m_actual_batches.append(batch["m_actual"].detach().cpu())
+            m_gold_batches.append(batch["m_gold"].detach().cpu())
             relevance_batches.append(batch["gold_relevance"].detach().cpu())
             order_batches.append(batch["gold_order_indices"].detach().cpu())
             sample_ids.extend(batch["sample_ids"])
@@ -153,7 +153,7 @@ def encode_split(
         "t": torch.cat(t_batches, dim=0),
         "i": torch.cat(i_batches, dim=0),
         "m_prob": torch.cat(m_prob_batches, dim=0),
-        "m_actual": torch.cat(m_actual_batches, dim=0),
+        "m_gold": torch.cat(m_gold_batches, dim=0),
         "gold_relevance": torch.cat(relevance_batches, dim=0),
         "gold_order": torch.cat(order_batches, dim=0),
     }

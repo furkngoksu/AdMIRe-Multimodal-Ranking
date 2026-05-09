@@ -32,7 +32,7 @@ def objective(trial: optuna.Trial) -> float:
             family_name=family_name,
             m_dims=(64,),
             seeds=SEEDS,
-            m_source="actual",
+            m_source="gold",
             fusion_type="concat",
             epochs=epochs,
             batch_size=batch_size,

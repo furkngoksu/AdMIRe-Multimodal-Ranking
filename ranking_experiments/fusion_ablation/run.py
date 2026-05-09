@@ -12,7 +12,7 @@ from ranking_experiments.runner import run_ablation
 SEEDS = (42, 100, 150, 200, 250)
 
 def main():
-    print("Starting Fusion Architecture Ablation (Actual / GT M)")
+    print("Starting Fusion Architecture Ablation (Gold M)")
     print("=" * 60)
     
     # 1. Baseline: Concat with M=64 (Our best model so far)
@@ -21,7 +21,7 @@ def main():
         family_name="fusion_ablation/concat_m64",
         m_dims=(64,),
         seeds=SEEDS,
-        m_source="actual",
+        m_source="gold",
         fusion_type="concat",
     )
     
@@ -31,7 +31,7 @@ def main():
         family_name="fusion_ablation/gated",
         m_dims=(0,),
         seeds=SEEDS,
-        m_source="actual",
+        m_source="gold",
         fusion_type="gated",
     )
     
@@ -41,7 +41,7 @@ def main():
         family_name="fusion_ablation/film_scale",
         m_dims=(0,),
         seeds=SEEDS,
-        m_source="actual",
+        m_source="gold",
         fusion_type="film",
     )
     
@@ -51,7 +51,7 @@ def main():
         family_name="fusion_ablation/film_full",
         m_dims=(0,),
         seeds=SEEDS,
-        m_source="actual",
+        m_source="gold",
         fusion_type="film_full",
     )
 

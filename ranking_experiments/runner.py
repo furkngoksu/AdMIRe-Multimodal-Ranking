@@ -37,7 +37,7 @@ class RankingExperimentConfig:
     m_embedding_dim: int
     seed: int
     query_projection: str = "pca_frozen"
-    m_source: str = "predicted"  # "predicted", "actual", or "none"
+    m_source: str = "predicted"  # "predicted" or "gold"
     fusion_type: str = "concat"  # "concat", "gated", "film", "film_full"
     epochs: int = 20
     batch_size: int = 4
@@ -61,7 +61,7 @@ class CachedRankingDataset(Dataset):
             "t": self.payload["t"][index],
             "i": self.payload["i"][index],
             "m_prob": self.payload["m_prob"][index],
-            "m_actual": self.payload["m_actual"][index],
+            "m_gold": self.payload["m_gold"][index],
             "gold_relevance": self.payload["gold_relevance"][index],
             "gold_order": self.payload["gold_order"][index],
         }
@@ -196,11 +196,13 @@ def forward_scores(
     device: torch.device,
 ) -> torch.Tensor:
     q_raw = batch["q_raw"].to(device)
-    if m_source == "actual":
-        m_tensor = batch["m_actual"].to(device)
-    else:
+    if m_source == "predicted":
         m_tensor = batch["m_prob"].to(device)
-        
+    elif m_source == "gold":
+        m_tensor = batch["m_gold"].to(device)
+    else:
+        raise ValueError(f"Unknown m_source: {m_source}")
+
     image_repr = batch["i"].to(device)
     caption_repr = batch["t"].to(device)
 
@@ -636,6 +638,7 @@ def run_ablation(
         {
             "family_name": family_name,
             "query_projection": query_projection,
+            "m_source": m_source,
             "fusion_type": fusion_type,
             "m_dims": list(m_dims),
             "seeds": list(seeds),
