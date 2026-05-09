@@ -139,6 +139,7 @@ admire2_submission/
 # Generated project outputs
 outputs/*
 !outputs/.gitkeep
+best_params.json
 
 # Stage outputs
 /unique_mwe_target_label_language.csv
