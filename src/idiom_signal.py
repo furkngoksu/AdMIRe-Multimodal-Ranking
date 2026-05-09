@@ -37,6 +37,10 @@ class IdiomSignalModel(nn.Module):
         model_name: str = "xlm-roberta-base",
         dropout: float = 0.1,
         freeze_encoder: bool = True,
+        hidden_1: int | None = None,
+        hidden_2: int | None = None,
+        dropout_1: float | None = None,
+        dropout_2: float | None = None,
     ) -> None:
         super().__init__()
 
@@ -51,13 +55,27 @@ class IdiomSignalModel(nn.Module):
         self.encoder = AutoModel.from_pretrained(model_name)
 
         hidden_dim = self.encoder.config.hidden_size
-        classifier_hidden_dim = max(1, hidden_dim // 2)
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, classifier_hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(classifier_hidden_dim, 1),
-        )
+        
+        if hidden_1 is not None and hidden_2 is not None and dropout_1 is not None and dropout_2 is not None:
+            self.classifier = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_1),
+                nn.BatchNorm1d(hidden_1),
+                nn.GELU(),
+                nn.Dropout(dropout_1),
+                nn.Linear(hidden_1, hidden_2),
+                nn.BatchNorm1d(hidden_2),
+                nn.GELU(),
+                nn.Dropout(dropout_2),
+                nn.Linear(hidden_2, 1)
+            )
+        else:
+            classifier_hidden_dim = max(1, hidden_dim // 2)
+            self.classifier = nn.Sequential(
+                nn.Linear(hidden_dim, classifier_hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(classifier_hidden_dim, 1),
+            )
 
         self.set_encoder_trainable(trainable=not freeze_encoder)
 
@@ -219,10 +237,16 @@ def load_idiom_signal(
         device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
     )
 
+    hyperparams = config.get("hyperparameters", {})
+
     model = IdiomSignalModel(
         model_name=config.get("model_name", "xlm-roberta-base"),
         dropout=float(config.get("dropout", 0.1)),
         freeze_encoder=True,
+        hidden_1=hyperparams.get("hidden_1"),
+        hidden_2=hyperparams.get("hidden_2"),
+        dropout_1=hyperparams.get("dropout_1"),
+        dropout_2=hyperparams.get("dropout_2"),
     )
     model.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
 

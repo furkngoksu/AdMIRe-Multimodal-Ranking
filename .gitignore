@@ -141,23 +141,25 @@ outputs/*
 !outputs/.gitkeep
 best_params.json
 
+# Model weights and data
+*.pt
+*.json
+
 # Stage outputs
-/unique_mwe_target_label_language.csv
-stage1_idiom_signal/output/*
-!stage1_idiom_signal/output/.gitkeep
+stage1_idiom_signal/**/output/*
+!stage1_idiom_signal/**/output/.gitkeep
+stage1_idiom_signal/**/cache/*
+!stage1_idiom_signal/**/cache/.gitkeep
+
 ranking_experiments/cache/*
 !ranking_experiments/cache/.gitkeep
 ranking_experiments/**/output/*
 !ranking_experiments/**/output/.gitkeep
 
-# Trained weights
-checkpoints/*
-!checkpoints/.gitkeep
-
-# Image artifacts
+# Image and Document artifacts
 *.jpg
 *.jpeg
-
-# Document artifacts
 *.pdf
 readme.md
+checkpoints/*
+!checkpoints/.gitkeep
