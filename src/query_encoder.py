@@ -13,6 +13,33 @@ from transformers import AutoModel, AutoTokenizer
 from src.config import QueryEncoderConfig
 
 
+class FrozenPCAProjection(nn.Module):
+    """Frozen PCA projection from cached Q_raw to the shared query dimension."""
+
+    def __init__(
+        self,
+        mean: torch.Tensor,
+        components: torch.Tensor,
+        output_dim: int,
+    ) -> None:
+        super().__init__()
+        self.output_dim = output_dim
+        self.register_buffer("mean", mean)
+        self.register_buffer("components", components)
+
+    def forward(self, q_raw: torch.Tensor) -> torch.Tensor:
+        projected = (q_raw - self.mean) @ self.components.t()
+
+        if projected.size(-1) < self.output_dim:
+            padding = projected.new_zeros(
+                projected.size(0),
+                self.output_dim - projected.size(-1),
+            )
+            projected = torch.cat([projected, padding], dim=-1)
+
+        return projected
+
+
 class QueryEncoder(nn.Module):
     FUZZY_SPAN_THRESHOLD = 0.80
 
@@ -32,7 +59,15 @@ class QueryEncoder(nn.Module):
         self.encoder.eval()
 
         hidden_dim = self.encoder.config.hidden_size
-        self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
+        
+        if getattr(config, "query_projection_type", "linear") == "pca":
+            self.projection = FrozenPCAProjection(
+                mean=torch.zeros(1, hidden_dim * 2),
+                components=torch.zeros(config.shared_dim, hidden_dim * 2),
+                output_dim=config.shared_dim,
+            )
+        else:
+            self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
 
     @staticmethod
     def find_compound_span(sentence: str, compound: str) -> Tuple[int, int]:

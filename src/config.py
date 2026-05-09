@@ -17,7 +17,7 @@ class PipelineDataConfig:
 @dataclass(frozen=True)
 class WeightsConfig:
     idiom_signal_dir: str = "stage1_idiom_signal/output"
-    ranking_weights_path: str = "ranking_experiments/m_dim_ablation_linear/output/m32/weights.pt"
+    ranking_weights_path: str = "ranking_experiments/oracle_ablation_pca/output/m64/seed100/weights.pt"
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,7 @@ class QueryEncoderConfig:
     model_name: str = "xlm-roberta-base"
     shared_dim: int = 512
     max_length: int = 128
+    query_projection_type: str = "pca"  # "pca" or "linear"
     debug: bool = False
 
 
@@ -46,7 +47,8 @@ class ImageEncoderConfig:
 @dataclass(frozen=True)
 class QueryFusionConfig:
     shared_dim: int = 512
-    m_embedding_dim: int = 32
+    m_embedding_dim: int = 64
+    fusion_type: str = "concat"  # "concat", "gated", "film"
 
 
 PIPELINE_DATA_CONFIG = PipelineDataConfig()

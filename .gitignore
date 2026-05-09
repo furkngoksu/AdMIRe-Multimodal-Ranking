@@ -146,9 +146,8 @@ stage1_idiom_signal/output/*
 !stage1_idiom_signal/output/.gitkeep
 ranking_experiments/cache/*
 !ranking_experiments/cache/.gitkeep
-ranking_experiments/*/output/**
-!ranking_experiments/*/output/
-!ranking_experiments/*/output/.gitkeep
+ranking_experiments/**/output/*
+!ranking_experiments/**/output/.gitkeep
 
 # Trained weights
 checkpoints/*

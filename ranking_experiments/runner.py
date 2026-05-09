@@ -20,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.candidate_fusion import GatedCandidateFusion
 from src.config import QueryFusionConfig, get_device
-from src.query_fusion import QueryFusion
+from src.query_fusion import BaseQueryFusion
 from src.ranker import CosineRanker
 from src.weights import load_weights, save_weights
 from ranking_experiments.losses import listwise_ranking_loss
@@ -34,10 +34,11 @@ SHARED_DIM = 512
 @dataclass(frozen=True)
 class RankingExperimentConfig:
     name: str
-    query_projection: str
     m_embedding_dim: int
     seed: int
-    m_source: str = "predicted"  # "predicted", "oracle", or "none"
+    query_projection: str = "pca_frozen"
+    m_source: str = "predicted"  # "predicted", "actual", or "none"
+    fusion_type: str = "concat"  # "concat", "gated", "film", "film_full"
     epochs: int = 20
     batch_size: int = 4
     learning_rate: float = 1e-4
@@ -60,7 +61,7 @@ class CachedRankingDataset(Dataset):
             "t": self.payload["t"][index],
             "i": self.payload["i"][index],
             "m_prob": self.payload["m_prob"][index],
-            "m_oracle": self.payload["m_oracle"][index],
+            "m_actual": self.payload["m_actual"][index],
             "gold_relevance": self.payload["gold_relevance"][index],
             "gold_order": self.payload["gold_order"][index],
         }
@@ -189,14 +190,14 @@ def forward_scores(
     batch: dict[str, torch.Tensor],
     m_source: str,
     query_projection: nn.Module,
-    query_fusion: QueryFusion,
+    query_fusion: BaseQueryFusion,
     candidate_fusion: GatedCandidateFusion,
     ranker: CosineRanker,
     device: torch.device,
 ) -> torch.Tensor:
     q_raw = batch["q_raw"].to(device)
-    if m_source == "oracle":
-        m_tensor = batch["m_oracle"].to(device)
+    if m_source == "actual":
+        m_tensor = batch["m_actual"].to(device)
     else:
         m_tensor = batch["m_prob"].to(device)
         
@@ -214,7 +215,7 @@ def train_one_epoch(
     loader: DataLoader,
     experiment: RankingExperimentConfig,
     query_projection: nn.Module,
-    query_fusion: QueryFusion,
+    query_fusion: BaseQueryFusion,
     candidate_fusion: GatedCandidateFusion,
     ranker: CosineRanker,
     optimizer: torch.optim.Optimizer,
@@ -266,7 +267,7 @@ def evaluate(
     split_name: str,
     m_source: str,
     query_projection: nn.Module,
-    query_fusion: QueryFusion,
+    query_fusion: BaseQueryFusion,
     candidate_fusion: GatedCandidateFusion,
     ranker: CosineRanker,
     device: torch.device,
@@ -330,6 +331,7 @@ def run_training(
         f"starting ranking run "
         f"name={experiment.name} "
         f"query_projection={experiment.query_projection} "
+        f"fusion_type={experiment.fusion_type} "
         f"m_embedding_dim={experiment.m_embedding_dim} "
         f"seed={experiment.seed} "
         f"device={device}"
@@ -342,9 +344,14 @@ def run_training(
         train_q_raw=train_q_raw,
         device=device,
     )
-    query_fusion = QueryFusion(
-        QueryFusionConfig(m_embedding_dim=experiment.m_embedding_dim)
-    ).to(device)
+    
+    # Use the new factory function to create QueryFusion
+    from src.query_fusion import build_query_fusion
+    query_fusion_config = QueryFusionConfig(
+        m_embedding_dim=experiment.m_embedding_dim,
+        fusion_type=experiment.fusion_type,
+    )
+    query_fusion = build_query_fusion(query_fusion_config).to(device)
     candidate_fusion = GatedCandidateFusion().to(device)
     ranker = CosineRanker().to(device)
 
@@ -558,10 +565,11 @@ def aggregate_runs(
 
 def run_ablation(
     family_name: str,
-    query_projection: str,
     m_dims: tuple[int, ...],
     seeds: tuple[int, ...],
     m_source: str = "predicted",
+    fusion_type: str = "concat",
+    query_projection: str = "pca_frozen",
     epochs: int = 20,
     batch_size: int = 4,
     learning_rate: float = 1e-4,
@@ -591,10 +599,11 @@ def run_ablation(
             run_name = f"m{m_dim}"
             experiment = RankingExperimentConfig(
                 name=run_name,
-                query_projection=query_projection,
                 m_embedding_dim=m_dim,
                 seed=seed,
+                query_projection=query_projection,
                 m_source=m_source,
+                fusion_type=fusion_type,
                 epochs=epochs,
                 batch_size=batch_size,
                 learning_rate=learning_rate,
@@ -627,6 +636,7 @@ def run_ablation(
         {
             "family_name": family_name,
             "query_projection": query_projection,
+            "fusion_type": fusion_type,
             "m_dims": list(m_dims),
             "seeds": list(seeds),
             "selection_metric": "dev_ndcg",

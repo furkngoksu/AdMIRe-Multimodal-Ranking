@@ -100,7 +100,7 @@ def build_train_sample(
         "compound": compound,
         "m_prob": m_scores[sample_id],
         "sentence_type": row.get("sentence_type", ""),
-        "m_oracle": 1.0 if row.get("sentence_type", "").lower() == "idiomatic" else 0.0,
+        "m_actual": 1.0 if row.get("sentence_type", "").lower() == "idiomatic" else 0.0,
         "candidate_names": candidate_names,
         "captions": captions,
         "image_paths": image_paths,
@@ -147,8 +147,8 @@ def collate_train_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
             [[sample["m_prob"]] for sample in samples],
             dtype=torch.float,
         ),
-        "m_oracle": torch.tensor(
-            [[sample["m_oracle"]] for sample in samples],
+        "m_actual": torch.tensor(
+            [[sample["m_actual"]] for sample in samples],
             dtype=torch.float,
         ),
         "sentence_types": [sample["sentence_type"] for sample in samples],
