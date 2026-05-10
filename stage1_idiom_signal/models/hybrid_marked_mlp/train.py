@@ -662,7 +662,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
     parser.add_argument("--output_dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--model_name", default="xlm-roberta-base")
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--final_epochs", type=int, default=None)
     parser.add_argument("--tune_epochs", type=int, default=5)
     parser.add_argument("--n_trials", type=int, default=10)
