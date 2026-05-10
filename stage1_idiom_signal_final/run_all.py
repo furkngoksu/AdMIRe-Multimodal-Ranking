@@ -3,18 +3,18 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from stage1_baseline_compare.hybrid_llm_fusion.train import (
+from stage1_idiom_signal_final.hybrid_llm_fusion.train import (
     DEFAULT_CACHE_PATH as DEFAULT_FUSION_CACHE_PATH,
     build_or_load_fusion_cache,
     train_hybrid_llm_fusion,
 )
-from stage1_baseline_compare.neural_m.train import (
+from stage1_idiom_signal_final.neural_m.train import (
     DEFAULT_CACHE_PATH,
     DEFAULT_LLM_RESULTS_DIR,
     build_or_load_cache,
     train_neural_m,
 )
-from stage1_baseline_compare.shared import (
+from stage1_idiom_signal_final.shared import (
     DEFAULT_CSV_PATH,
     build_new_target_only_input,
     build_old_marked_input,
@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--llm_results_dir", default=str(DEFAULT_LLM_RESULTS_DIR))
     parser.add_argument("--neural_cache_path", default=str(DEFAULT_CACHE_PATH))
     parser.add_argument("--fusion_cache_path", default=str(DEFAULT_FUSION_CACHE_PATH))
-    parser.add_argument("--output_root", default="stage1_baseline_compare/outputs")
+    parser.add_argument("--output_root", default="stage1_idiom_signal_final/outputs")
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=16)

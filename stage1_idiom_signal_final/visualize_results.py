@@ -50,8 +50,8 @@ def ensure_report_dependencies() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create tables and plots from Stage 1 comparison metrics.")
-    parser.add_argument("--output_root", default="stage1_baseline_compare/outputs")
-    parser.add_argument("--report_dir", default="stage1_baseline_compare/reports")
+    parser.add_argument("--output_root", default="stage1_idiom_signal_final/outputs")
+    parser.add_argument("--report_dir", default="stage1_idiom_signal_final/reports")
     parser.add_argument("--models", nargs="*", default=DEFAULT_MODELS)
     return parser.parse_args()
 
