@@ -71,13 +71,9 @@ concat = 3840 dims
     -> sigmoid(logit) = M
 ```
 
-## One Command
+## Main Commands
 
 From repo root:
-
-```powershell
-.venv\Scripts\python.exe -m stage1_idiom_signal.runners.run_both --epochs 1 --limit 512
-```
 
 Run all comparison models:
 
@@ -94,7 +90,7 @@ Run all models and create tables/plots:
 Use the full CSV by passing `--limit 0`:
 
 ```powershell
-.venv\Scripts\python.exe -m stage1_idiom_signal.runners.run_both --epochs 3 --limit 0
+.venv\Scripts\python.exe -m stage1_idiom_signal.runners.run_all_and_report --epochs 40 --limit 0 --batch_size 16 --neural_batch_size 64 --fusion_batch_size 64
 ```
 
 ## Run Separately
