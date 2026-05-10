@@ -1,0 +1,20 @@
+[
+  {
+    "language": "EN",
+    "mwe": "spilled the beans",
+    "sentence": "He spilled the beans about the plan.",
+    "m_score": 0.45339131355285645
+  },
+  {
+    "language": "EN",
+    "mwe": "kicked the ball",
+    "sentence": "She kicked the ball.",
+    "m_score": 0.43547385931015015
+  },
+  {
+    "language": "EN",
+    "mwe": "break the ice",
+    "sentence": "The joke helped break the ice before the meeting.",
+    "m_score": 0.4499785304069519
+  }
+]
