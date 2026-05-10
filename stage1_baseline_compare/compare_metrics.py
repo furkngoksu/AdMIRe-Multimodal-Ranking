@@ -10,6 +10,11 @@ from stage1_baseline_compare.shared import print_metric_table
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare saved quick baseline metrics.")
     parser.add_argument("--output_root", default="stage1_baseline_compare/outputs")
+    parser.add_argument(
+        "--models",
+        nargs="*",
+        default=["old_marked_input", "new_target_only", "hybrid_marked_mlp", "neural_m"],
+    )
     return parser.parse_args()
 
 
@@ -22,13 +27,19 @@ def load_metrics(path: Path) -> dict:
 def main() -> None:
     args = parse_args()
     root = Path(args.output_root)
-    results = [
-        load_metrics(root / "old_marked_input" / "metrics.json"),
-        load_metrics(root / "new_target_only" / "metrics.json"),
-    ]
+    results = []
+    for model_name in args.models:
+        metrics_path = root / model_name / "metrics.json"
+        if metrics_path.exists():
+            results.append(load_metrics(metrics_path))
+        else:
+            print(f"Skipping missing metrics: {metrics_path}")
+
+    if not results:
+        raise FileNotFoundError(f"No metrics files found under {root}")
+
     print_metric_table(results)
 
 
 if __name__ == "__main__":
     main()
-

@@ -39,6 +39,10 @@ def build_new_target_only_input(row: dict[str, Any]) -> str:
     return row["target"]
 
 
+def build_plain_sentence_mwe_input(row: dict[str, Any]) -> str:
+    return f"[LANG={row['language']}] {row['target']} [MWE] {row['mwe']}"
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     torch.manual_seed(seed)
@@ -462,6 +466,10 @@ def run_training(
         "history": history,
     }
     save_json(output_path / "metrics.json", payload)
+
+    model.to("cpu")
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     return payload
 
 
