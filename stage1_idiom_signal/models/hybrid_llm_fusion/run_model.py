@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,22 +14,76 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm.auto import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from stage1_idiom_signal.common import (
-    DEFAULT_CSV_PATH,
-    REPO_ROOT,
-    apply_limit,
-    compute_metrics,
-    read_idiom_csv,
-    save_json,
-    set_seed,
-    stratified_split,
-)
-
-
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
 DEFAULT_LLM_RESULTS_DIR = REPO_ROOT / "llm_results"
-DEFAULT_CACHE_PATH = REPO_ROOT / "stage1_idiom_signal/cache/neural_m_pooled.pt"
-TEXT_KEYS = ["target", "paraphrase", "lex_sub", "comp_drop", "literalize"]
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
+DEFAULT_CACHE_PATH = DEFAULT_OUTPUT_DIR / "hybrid_llm_fusion_pooled.pt"
+REQUIRED_COLUMNS = {"Language", "MWE", "Target", "Label"}
+TEXT_KEYS = ["hybrid_input", "target", "paraphrase", "lex_sub", "comp_drop", "literalize"]
 LANG_CODE_MAP = {"English": "EN", "Portuguese": "PT"}
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def read_idiom_csv(csv_path: str | Path) -> list[dict[str, Any]]:
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(f"CSV file not found: {path}")
+
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        if reader.fieldnames is None:
+            raise ValueError("CSV file has no header row.")
+
+        missing = REQUIRED_COLUMNS - set(reader.fieldnames)
+        if missing:
+            raise ValueError(f"CSV is missing required columns: {sorted(missing)}")
+
+        for line_number, row in enumerate(reader, start=2):
+            label_text = (row.get("Label") or "").strip()
+            if label_text == "":
+                raise ValueError(f"Missing Label at CSV line {line_number}.")
+
+            label = float(label_text)
+            if label not in {0.0, 1.0}:
+                raise ValueError(f"Label must be 0 or 1 at CSV line {line_number}.")
+
+            rows.append(
+                {
+                    "language": (row.get("Language") or "").strip(),
+                    "mwe": (row.get("MWE") or "").strip(),
+                    "target": (row.get("Target") or "").strip(),
+                    "label": label,
+                }
+            )
+
+    if not rows:
+        raise ValueError(f"CSV file contains no rows: {path}")
+    return rows
+
+
+def mark_mwe_in_sentence(sentence: str, mwe: str) -> str:
+    if not mwe:
+        return sentence
+
+    match = re.search(re.escape(mwe), sentence, flags=re.IGNORECASE)
+    if match is None:
+        return sentence
+
+    start, end = match.span()
+    return f"{sentence[:start]}<mwe>{sentence[start:end]}</mwe>{sentence[end:]}"
+
+
+def build_old_marked_input(row: dict[str, Any]) -> str:
+    marked = mark_mwe_in_sentence(row["target"], row["mwe"])
+    return f"[LANG={row['language']}] {marked} [MWE] {row['mwe']}"
 
 
 def token_set(text: str) -> set[str]:
@@ -114,7 +170,71 @@ def mean_pool(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torc
     return summed / counts
 
 
-def build_or_load_cache(
+def stratified_split(labels: list[float], val_ratio: float, seed: int) -> tuple[list[int], list[int]]:
+    if not 0.0 <= val_ratio < 1.0:
+        raise ValueError("val_ratio must be in [0, 1).")
+
+    if val_ratio == 0.0 or len(labels) < 2:
+        return list(range(len(labels))), []
+
+    by_label: dict[float, list[int]] = {}
+    for index, label in enumerate(labels):
+        by_label.setdefault(float(label), []).append(index)
+
+    rng = random.Random(seed)
+    train_indices: list[int] = []
+    val_indices: list[int] = []
+
+    for group in by_label.values():
+        shuffled = group[:]
+        rng.shuffle(shuffled)
+        val_count = max(1, round(len(shuffled) * val_ratio))
+        val_count = min(val_count, len(shuffled) - 1)
+        val_indices.extend(shuffled[:val_count])
+        train_indices.extend(shuffled[val_count:])
+
+    rng.shuffle(train_indices)
+    rng.shuffle(val_indices)
+    return train_indices, val_indices
+
+
+def compute_metrics(probabilities: list[float], labels: list[float]) -> dict[str, float | None]:
+    predictions = [1.0 if value >= 0.5 else 0.0 for value in probabilities]
+    total = max(1, len(labels))
+    correct = sum(pred == label for pred, label in zip(predictions, labels))
+
+    tp = sum(pred == 1.0 and label == 1.0 for pred, label in zip(predictions, labels))
+    fp = sum(pred == 1.0 and label == 0.0 for pred, label in zip(predictions, labels))
+    fn = sum(pred == 0.0 and label == 1.0 for pred, label in zip(predictions, labels))
+
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+
+    roc_auc: float | None = None
+    if len(set(labels)) > 1:
+        try:
+            from sklearn.metrics import roc_auc_score
+
+            roc_auc = float(roc_auc_score(labels, probabilities))
+        except (ImportError, ValueError):
+            roc_auc = None
+
+    return {
+        "accuracy": float(correct / total),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+        "roc_auc": roc_auc,
+    }
+
+
+def save_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def build_or_load_fusion_cache(
     *,
     cache_path: Path,
     csv_path: Path,
@@ -136,7 +256,7 @@ def build_or_load_cache(
         )
         if cache_matches_request:
             return cache
-        print(f"Neural M cache config changed; rebuilding {cache_path}")
+        print(f"Hybrid LLM fusion cache config changed; rebuilding {cache_path}")
 
     rows = read_idiom_csv(csv_path)
     matched = match_llm_records(
@@ -144,7 +264,6 @@ def build_or_load_cache(
         llm_results_dir=llm_results_dir,
         max_matches=limit if limit > 0 else None,
     )
-    matched = apply_limit(matched, limit=limit, seed=seed)
     if not matched:
         raise ValueError("No LLM perturbation records matched the CSV.")
 
@@ -157,9 +276,16 @@ def build_or_load_cache(
     pooled_chunks: list[torch.Tensor] = []
     num_texts = len(TEXT_KEYS)
 
-    for start in tqdm(range(0, len(matched), encode_batch_size), desc="Encoding Neural M cache"):
+    for start in tqdm(range(0, len(matched), encode_batch_size), desc="Encoding Hybrid LLM cache"):
         batch = matched[start : start + encode_batch_size]
-        flat_texts = [record[key] for record in batch for key in TEXT_KEYS]
+        flat_texts = []
+        for record in batch:
+            record_with_hybrid = {
+                **record,
+                "hybrid_input": build_old_marked_input(record),
+            }
+            flat_texts.extend(record_with_hybrid[key] for key in TEXT_KEYS)
+
         encoded = tokenizer(
             flat_texts,
             padding=True,
@@ -204,7 +330,7 @@ def build_or_load_cache(
     return cache
 
 
-class NeuralMDataset(Dataset):
+class HybridLLMFusionDataset(Dataset):
     def __init__(self, cache: dict[str, Any]) -> None:
         pooled = cache["pooled"].float()
         text_keys = cache["text_keys_order"]
@@ -213,6 +339,7 @@ class NeuralMDataset(Dataset):
         center = pooled.reshape(-1, pooled.size(-1)).mean(dim=0, keepdim=True)
         emb = pooled - center.view(1, 1, -1)
 
+        hybrid_input = emb[:, key_to_index["hybrid_input"]]
         target = emb[:, key_to_index["target"]]
         paraphrase = emb[:, key_to_index["paraphrase"]]
         lex_sub = emb[:, key_to_index["lex_sub"]]
@@ -224,7 +351,7 @@ class NeuralMDataset(Dataset):
         f_lit = torch.abs(target - literalize)
         f_para = torch.abs(target - paraphrase)
 
-        self.features = torch.cat([f_sub, f_comp, f_lit, f_para], dim=-1)
+        self.features = torch.cat([hybrid_input, f_sub, f_comp, f_lit, f_para], dim=-1)
         self.labels = torch.tensor(
             [float(item["label"]) for item in cache["metadata"]],
             dtype=torch.float,
@@ -237,8 +364,15 @@ class NeuralMDataset(Dataset):
         return self.features[index], self.labels[index]
 
 
-class NeuralMModel(nn.Module):
-    def __init__(self, input_dim: int, hidden_1: int, hidden_2: int, dropout_1: float, dropout_2: float) -> None:
+class HybridLLMFusionModel(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_1: int,
+        hidden_2: int,
+        dropout_1: float,
+        dropout_2: float,
+    ) -> None:
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_1),
@@ -256,8 +390,8 @@ class NeuralMModel(nn.Module):
         return self.mlp(features).squeeze(-1)
 
 
-def evaluate_neural_m(
-    model: NeuralMModel,
+def evaluate_fusion(
+    model: HybridLLMFusionModel,
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
@@ -286,7 +420,7 @@ def evaluate_neural_m(
     return metrics
 
 
-def train_neural_m(
+def train_hybrid_llm_fusion(
     *,
     cache: dict[str, Any],
     output_dir: Path,
@@ -302,12 +436,12 @@ def train_neural_m(
     dropout_2: float,
 ) -> dict[str, Any]:
     set_seed(seed)
-    dataset = NeuralMDataset(cache)
+    dataset = HybridLLMFusionDataset(cache)
     train_indices, val_indices = stratified_split(dataset.labels.tolist(), val_ratio=val_ratio, seed=seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if batch_size < 2:
-        raise ValueError("Neural M uses BatchNorm, so batch_size must be at least 2.")
+        raise ValueError("Hybrid LLM fusion uses BatchNorm, so batch_size must be at least 2.")
 
     drop_last_train_batch = len(train_indices) > batch_size and len(train_indices) % batch_size == 1
     train_loader = DataLoader(
@@ -318,7 +452,7 @@ def train_neural_m(
     )
     val_loader = DataLoader(Subset(dataset, val_indices), batch_size=batch_size, shuffle=False)
 
-    model = NeuralMModel(
+    model = HybridLLMFusionModel(
         input_dim=dataset.features.size(-1),
         hidden_1=hidden_1,
         hidden_2=hidden_2,
@@ -353,7 +487,7 @@ def train_neural_m(
             total_examples += batch_size_actual
 
         train_loss = total_loss / max(1, total_examples)
-        val_metrics = evaluate_neural_m(model, val_loader, criterion, device)
+        val_metrics = evaluate_fusion(model, val_loader, criterion, device)
         history.append(
             {
                 "epoch": epoch,
@@ -368,7 +502,7 @@ def train_neural_m(
         )
 
         print(
-            f"neural_m epoch={epoch}/{epochs} "
+            f"hybrid_llm_fusion epoch={epoch}/{epochs} "
             f"train_loss={train_loss:.4f} "
             f"val_loss={float(val_metrics['loss']):.4f} "
             f"val_acc={float(val_metrics['accuracy']):.4f} "
@@ -383,7 +517,7 @@ def train_neural_m(
             best_metrics = val_metrics
             torch.save(
                 {
-                    "name": "neural_m",
+                    "name": "hybrid_llm_fusion",
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "metrics": val_metrics,
@@ -392,9 +526,9 @@ def train_neural_m(
             )
 
     payload = {
-        "name": "neural_m",
-        "input_format": "abs(target - perturbation) vectors: sub/comp/lit/paraphrase",
-        "head_type": "new_mlp_3072",
+        "name": "hybrid_llm_fusion",
+        "input_format": "marked-input XLM-R embedding + LLM perturbation difference vectors",
+        "head_type": "fusion_mlp_3840",
         "epochs": epochs,
         "batch_size": batch_size,
         "lr": lr,
@@ -408,6 +542,12 @@ def train_neural_m(
         "best_val_f1": best_f1,
         "best_metrics": best_metrics,
         "history": history,
+        "hyperparameters": {
+            "hidden_1": hidden_1,
+            "hidden_2": hidden_2,
+            "dropout_1": dropout_1,
+            "dropout_2": dropout_2,
+        },
     }
     save_json(output_dir / "metrics.json", payload)
 
@@ -418,11 +558,11 @@ def train_neural_m(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the LLM perturbation-vector Neural M baseline.")
+    parser = argparse.ArgumentParser(description="Run hybrid marked-input + LLM perturbation fusion.")
     parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
     parser.add_argument("--llm_results_dir", default=str(DEFAULT_LLM_RESULTS_DIR))
     parser.add_argument("--cache_path", default=str(DEFAULT_CACHE_PATH))
-    parser.add_argument("--output_dir", default="stage1_idiom_signal/outputs/neural_m")
+    parser.add_argument("--output_dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=64)
@@ -433,17 +573,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val_ratio", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--limit", type=int, default=512, help="Use 0 for all matched LLM records.")
-    parser.add_argument("--hidden_1", type=int, default=512)
-    parser.add_argument("--hidden_2", type=int, default=128)
-    parser.add_argument("--dropout_1", type=float, default=0.2)
-    parser.add_argument("--dropout_2", type=float, default=0.2)
+    parser.add_argument("--hidden_1", type=int, default=1024)
+    parser.add_argument("--hidden_2", type=int, default=256)
+    parser.add_argument("--dropout_1", type=float, default=0.3)
+    parser.add_argument("--dropout_2", type=float, default=0.3)
     parser.add_argument("--force_rebuild_cache", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    cache = build_or_load_cache(
+    cache = build_or_load_fusion_cache(
         cache_path=Path(args.cache_path),
         csv_path=Path(args.csv_path),
         llm_results_dir=Path(args.llm_results_dir),
@@ -454,7 +594,7 @@ def main() -> None:
         seed=args.seed,
         force_rebuild=args.force_rebuild_cache,
     )
-    train_neural_m(
+    train_hybrid_llm_fusion(
         cache=cache,
         output_dir=Path(args.output_dir),
         epochs=args.epochs,

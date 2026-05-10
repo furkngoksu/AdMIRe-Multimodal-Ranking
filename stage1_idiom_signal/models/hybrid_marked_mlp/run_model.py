@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import random
@@ -13,8 +14,9 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from transformers import AutoModel, AutoTokenizer, PreTrainedTokenizerBase
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 REQUIRED_COLUMNS = {"Language", "MWE", "Target", "Label"}
 
 
@@ -488,3 +490,89 @@ def print_metric_table(results: list[dict[str, Any]]) -> None:
             f"{auc_text}\t"
             f"{result['input_format']}"
         )
+
+
+def train_hybrid_marked_mlp(
+    *,
+    csv_path: str | Path = DEFAULT_CSV_PATH,
+    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    model_name: str = "xlm-roberta-base",
+    epochs: int = 1,
+    batch_size: int = 16,
+    lr: float = 1e-4,
+    max_length: int = 128,
+    val_ratio: float = 0.15,
+    seed: int = 42,
+    limit: int = 512,
+    hidden_1: int = 512,
+    hidden_2: int = 128,
+    dropout_1: float = 0.2,
+    dropout_2: float = 0.2,
+    unfreeze_encoder: bool = False,
+) -> dict[str, Any]:
+    return run_training(
+        name="hybrid_marked_mlp",
+        csv_path=csv_path,
+        output_dir=output_dir,
+        text_builder=build_old_marked_input,
+        input_format="[LANG] + sentence with <mwe> tags + [MWE]",
+        head_type="new_mlp",
+        epochs=epochs,
+        batch_size=batch_size,
+        lr=lr,
+        max_length=max_length,
+        val_ratio=val_ratio,
+        seed=seed,
+        limit=limit,
+        model_name=model_name,
+        unfreeze_encoder=unfreeze_encoder,
+        hidden_1=hidden_1,
+        hidden_2=hidden_2,
+        dropout_1=dropout_1,
+        dropout_2=dropout_2,
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the hybrid marked-input Stage 1 baseline.")
+    parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
+    parser.add_argument("--output_dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--model_name", default="xlm-roberta-base")
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--max_length", type=int, default=128)
+    parser.add_argument("--val_ratio", type=float, default=0.15)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--limit", type=int, default=512, help="Use 0 for the full CSV.")
+    parser.add_argument("--hidden_1", type=int, default=512)
+    parser.add_argument("--hidden_2", type=int, default=128)
+    parser.add_argument("--dropout_1", type=float, default=0.2)
+    parser.add_argument("--dropout_2", type=float, default=0.2)
+    parser.add_argument("--unfreeze_encoder", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    train_hybrid_marked_mlp(
+        csv_path=args.csv_path,
+        output_dir=args.output_dir,
+        model_name=args.model_name,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        max_length=args.max_length,
+        val_ratio=args.val_ratio,
+        seed=args.seed,
+        limit=args.limit,
+        hidden_1=args.hidden_1,
+        hidden_2=args.hidden_2,
+        dropout_1=args.dropout_1,
+        dropout_2=args.dropout_2,
+        unfreeze_encoder=args.unfreeze_encoder,
+    )
+
+
+if __name__ == "__main__":
+    main()
