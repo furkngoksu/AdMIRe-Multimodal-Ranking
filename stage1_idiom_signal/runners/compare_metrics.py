@@ -4,12 +4,12 @@ import argparse
 import json
 from pathlib import Path
 
-from stage1_idiom_signal_final.shared import print_metric_table
+from stage1_idiom_signal.common import print_metric_table
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare saved quick baseline metrics.")
-    parser.add_argument("--output_root", default="stage1_idiom_signal_final/outputs")
+    parser.add_argument("--output_root", default="stage1_idiom_signal/outputs")
     parser.add_argument(
         "--models",
         nargs="*",

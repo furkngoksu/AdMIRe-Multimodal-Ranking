@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from stage1_idiom_signal_final.shared import (
+from stage1_idiom_signal.common import (
     DEFAULT_CSV_PATH,
     build_new_target_only_input,
     build_old_marked_input,
@@ -15,7 +15,7 @@ from stage1_idiom_signal_final.shared import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run old and current Stage 1 baselines quickly.")
     parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
-    parser.add_argument("--output_root", default="stage1_idiom_signal_final/outputs")
+    parser.add_argument("--output_root", default="stage1_idiom_signal/outputs")
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=16)

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import argparse
 
-from stage1_idiom_signal_final.shared import (
+from stage1_idiom_signal.common import (
     DEFAULT_CSV_PATH,
-    build_new_target_only_input,
+    build_old_marked_input,
     run_training,
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the current target-only Stage 1 baseline.")
+    parser = argparse.ArgumentParser(description="Run the hybrid marked-input Stage 1 baseline.")
     parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
-    parser.add_argument("--output_dir", default="stage1_idiom_signal_final/outputs/new_target_only")
+    parser.add_argument("--output_dir", default="stage1_idiom_signal/outputs/hybrid_marked_mlp")
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=16)
@@ -32,11 +32,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     run_training(
-        name="new_target_only",
+        name="hybrid_marked_mlp",
         csv_path=args.csv_path,
         output_dir=args.output_dir,
-        text_builder=build_new_target_only_input,
-        input_format="raw Target sentence only",
+        text_builder=build_old_marked_input,
+        input_format="[LANG] + sentence with <mwe> tags + [MWE]",
         head_type="new_mlp",
         epochs=args.epochs,
         batch_size=args.batch_size,
