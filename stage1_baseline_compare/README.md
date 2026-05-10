@@ -54,6 +54,24 @@ target, paraphrase, lexical substitution, component drop, literalization
 Neural M uses the already saved `llm_results/*.jsonl` perturbation outputs. It
 does not call any LLM API.
 
+Hybrid LLM fusion:
+
+```text
+[LANG=EN] sentence with <mwe>...</mwe> [MWE] compound
+    -> XLM-R mean pool = 768 dims
+
+LLM perturbation vectors
+    -> abs(target - lex_sub), abs(target - comp_drop),
+       abs(target - literalize), abs(target - paraphrase)
+    -> 3072 dims
+
+concat = 3840 dims
+    -> Linear(3840, 1024), BatchNorm, GELU, Dropout(0.3),
+       Linear(1024, 256), BatchNorm, GELU, Dropout(0.3),
+       Linear(256, 1)
+    -> sigmoid(logit) = M
+```
+
 ## One Command
 
 From repo root:
@@ -100,6 +118,12 @@ Neural M:
 .venv\Scripts\python.exe -m stage1_baseline_compare.neural_m.train --epochs 1 --limit 512
 ```
 
+Hybrid LLM fusion:
+
+```powershell
+.venv\Scripts\python.exe -m stage1_baseline_compare.hybrid_llm_fusion.train --epochs 1 --limit 512
+```
+
 Compare saved metrics:
 
 ```powershell
@@ -119,7 +143,10 @@ stage1_baseline_compare/outputs/hybrid_marked_mlp/metrics.json
 stage1_baseline_compare/outputs/hybrid_marked_mlp/model.pt
 stage1_baseline_compare/outputs/neural_m/metrics.json
 stage1_baseline_compare/outputs/neural_m/model.pt
+stage1_baseline_compare/outputs/hybrid_llm_fusion/metrics.json
+stage1_baseline_compare/outputs/hybrid_llm_fusion/model.pt
 stage1_baseline_compare/cache/neural_m_pooled.pt
+stage1_baseline_compare/cache/hybrid_llm_fusion_pooled.pt
 ```
 
 ## Important Notes
@@ -131,3 +158,4 @@ stage1_baseline_compare/cache/neural_m_pooled.pt
 - Best model selection is by validation F1.
 - This folder calls no LLM API.
 - `run_all` will build the Neural M cache the first time, then reuse it.
+- `run_all` will also build the Hybrid LLM fusion cache the first time.

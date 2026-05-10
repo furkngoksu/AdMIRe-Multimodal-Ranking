@@ -13,7 +13,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models",
         nargs="*",
-        default=["old_marked_input", "new_target_only", "hybrid_marked_mlp", "neural_m"],
+        default=[
+            "old_marked_input",
+            "new_target_only",
+            "hybrid_marked_mlp",
+            "neural_m",
+            "hybrid_llm_fusion",
+        ],
     )
     return parser.parse_args()
 
