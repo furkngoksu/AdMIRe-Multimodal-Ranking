@@ -9,6 +9,7 @@ import torch
 class PipelineDataConfig:
     tsv_path: str = "admire2_submission/admire2_sentences/submission_Turkish.tsv"
     image_root: str = "admire2_submission/admire2_data/Turkish"
+    m_scores_path: str = "stage1_idiom_signal_final/output/submission_m_scores.json"
     language: str = "Turkish"
     num_candidates: int = 5
     batch_size: int = 1
@@ -16,7 +17,6 @@ class PipelineDataConfig:
 
 @dataclass(frozen=True)
 class WeightsConfig:
-    idiom_signal_dir: str = "stage1_idiom_signal/output"
     ranking_weights_path: str = "ranking_experiments/gold_m_ablation_pca/output/m64/seed100/weights.pt"
 
 

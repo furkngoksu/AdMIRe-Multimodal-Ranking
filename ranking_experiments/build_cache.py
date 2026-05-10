@@ -24,7 +24,7 @@ from ranking_experiments.train_data import (
 
 
 CACHE_PATH = REPO_ROOT / "ranking_experiments/cache/admire_rank_cache.pt"
-M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal/output/admire_train_scores.tsv"
+M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal_final/output/admire_train_scores.tsv"
 CACHE_BATCH_SIZE = 4
 
 SPLIT_FILES = {

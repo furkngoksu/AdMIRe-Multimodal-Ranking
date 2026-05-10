@@ -41,7 +41,7 @@ class FrozenPCAProjection(nn.Module):
 
 
 class QueryEncoder(nn.Module):
-    FUZZY_SPAN_THRESHOLD = 0.80
+    FUZZY_SPAN_THRESHOLD = 0.50
 
     def __init__(self, config: QueryEncoderConfig = QueryEncoderConfig()) -> None:
         super().__init__()
@@ -107,37 +107,35 @@ class QueryEncoder(nn.Module):
         sentence: str,
         compound: str,
     ) -> Tuple[int, int] | None:
-        """Find a close inflected/surface variant of the compound in the sentence."""
-        compound_tokens = QueryEncoder.word_spans(compound)
-        sentence_tokens = QueryEncoder.word_spans(sentence)
-
-        window_size = len(compound_tokens)
-        if window_size == 0 or len(sentence_tokens) < window_size:
+        """Find a close variant of the compound using character-level sliding window."""
+        norm_s = QueryEncoder.normalize_for_match(sentence)
+        norm_c = QueryEncoder.normalize_for_match(compound)
+        
+        c_len = len(norm_c)
+        if c_len == 0 or len(norm_s) < c_len:
             return None
 
-        normalized_compound = QueryEncoder.normalize_for_match(compound)
         best_score = 0.0
-        best_span: tuple[int, int] | None = None
+        best_char_span: tuple[int, int] | None = None
 
-        for start_idx in range(0, len(sentence_tokens) - window_size + 1):
-            window = sentence_tokens[start_idx : start_idx + window_size]
-            window_text = " ".join(token for token, _, _ in window)
-            normalized_window = QueryEncoder.normalize_for_match(window_text)
+        # Character-level sliding window (Handles Chinese and inflections)
+        # We search in a range around the original compound length
+        for w_len in range(max(1, c_len - 2), c_len + 3):
+            for i in range(len(norm_s) - w_len + 1):
+                window = norm_s[i : i + w_len]
+                score = SequenceMatcher(None, norm_c, window).ratio()
+                
+                if score > best_score:
+                    best_score = score
+                    # Map normalized index back to original sentence index? 
+                    # For simplicity and since normalization here is just case/accent, 
+                    # the indices should roughly align.
+                    best_char_span = (i, i + w_len)
 
-            score = SequenceMatcher(
-                None,
-                normalized_compound,
-                normalized_window,
-            ).ratio()
-
-            if score > best_score:
-                best_score = score
-                best_span = (window[0][1], window[-1][2])
-
-        if best_span is None or best_score < QueryEncoder.FUZZY_SPAN_THRESHOLD:
+        if best_char_span is None or best_score < QueryEncoder.FUZZY_SPAN_THRESHOLD:
             return None
 
-        return best_span
+        return best_char_span
 
     @staticmethod
     def mean_pool(
