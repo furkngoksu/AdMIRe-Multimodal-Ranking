@@ -86,6 +86,12 @@ Run all comparison models:
 .venv\Scripts\python.exe -m stage1_baseline_compare.run_all --epochs 1 --limit 512
 ```
 
+Run all models and create tables/plots:
+
+```powershell
+.venv\Scripts\python.exe -m stage1_baseline_compare.run_all_and_report --epochs 1 --limit 512
+```
+
 Use the full CSV by passing `--limit 0`:
 
 ```powershell
@@ -130,6 +136,12 @@ Compare saved metrics:
 .venv\Scripts\python.exe -m stage1_baseline_compare.compare_metrics
 ```
 
+Create saved tables and plots from existing metrics:
+
+```powershell
+.venv\Scripts\python.exe -m stage1_baseline_compare.visualize_results
+```
+
 ## Outputs
 
 Generated outputs are ignored by git:
@@ -147,6 +159,12 @@ stage1_baseline_compare/outputs/hybrid_llm_fusion/metrics.json
 stage1_baseline_compare/outputs/hybrid_llm_fusion/model.pt
 stage1_baseline_compare/cache/neural_m_pooled.pt
 stage1_baseline_compare/cache/hybrid_llm_fusion_pooled.pt
+stage1_baseline_compare/reports/summary.csv
+stage1_baseline_compare/reports/summary.md
+stage1_baseline_compare/reports/history.csv
+stage1_baseline_compare/reports/best_metrics.png
+stage1_baseline_compare/reports/val_f1_curve.png
+stage1_baseline_compare/reports/val_loss_curve.png
 ```
 
 ## Important Notes
