@@ -17,7 +17,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CSV_PATH = REPO_ROOT / "stage1_idiom_signal/data/unique_mwe_target_label_language.csv"
 DEFAULT_LLM_RESULTS_DIR = REPO_ROOT / "llm_results"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
-DEFAULT_CACHE_PATH = DEFAULT_OUTPUT_DIR / "neural_m_pooled.pt"
 REQUIRED_COLUMNS = {"Language", "MWE", "Target", "Label"}
 TEXT_KEYS = ["target", "paraphrase", "lex_sub", "comp_drop", "literalize"]
 LANG_CODE_MAP = {"English": "EN", "Portuguese": "PT"}
@@ -226,9 +225,8 @@ def mean_pool(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torc
     return summed / counts
 
 
-def build_or_load_cache(
+def build_neural_m_features(
     *,
-    cache_path: Path,
     csv_path: Path,
     llm_results_dir: Path,
     model_name: str,
@@ -236,20 +234,7 @@ def build_or_load_cache(
     encode_batch_size: int,
     limit: int,
     seed: int,
-    force_rebuild: bool,
 ) -> dict[str, Any]:
-    if cache_path.exists() and not force_rebuild:
-        cache = torch.load(cache_path, map_location="cpu")
-        cache_matches_request = (
-            cache.get("limit") == limit
-            and cache.get("seed") == seed
-            and cache.get("model_name") == model_name
-            and cache.get("max_length") == max_length
-        )
-        if cache_matches_request:
-            return cache
-        print(f"Neural M cache config changed; rebuilding {cache_path}")
-
     rows = read_idiom_csv(csv_path)
     matched = match_llm_records(
         csv_rows=rows,
@@ -260,7 +245,6 @@ def build_or_load_cache(
     if not matched:
         raise ValueError("No LLM perturbation records matched the CSV.")
 
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     encoder = AutoModel.from_pretrained(model_name).to(device)
@@ -269,7 +253,7 @@ def build_or_load_cache(
     pooled_chunks: list[torch.Tensor] = []
     num_texts = len(TEXT_KEYS)
 
-    for start in tqdm(range(0, len(matched), encode_batch_size), desc="Encoding Neural M cache"):
+    for start in tqdm(range(0, len(matched), encode_batch_size), desc="Encoding Neural M features"):
         batch = matched[start : start + encode_batch_size]
         flat_texts = [record[key] for record in batch for key in TEXT_KEYS]
         encoded = tokenizer(
@@ -288,7 +272,7 @@ def build_or_load_cache(
 
         pooled_chunks.append(pooled.view(len(batch), num_texts, -1).cpu().to(torch.float16))
 
-    cache = {
+    features = {
         "pooled": torch.cat(pooled_chunks, dim=0),
         "metadata": [
             {
@@ -308,18 +292,17 @@ def build_or_load_cache(
         "seed": seed,
         "num_examples": len(matched),
     }
-    torch.save(cache, cache_path)
 
     encoder.to("cpu")
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    return cache
+    return features
 
 
 class NeuralMDataset(Dataset):
-    def __init__(self, cache: dict[str, Any]) -> None:
-        pooled = cache["pooled"].float()
-        text_keys = cache["text_keys_order"]
+    def __init__(self, features: dict[str, Any]) -> None:
+        pooled = features["pooled"].float()
+        text_keys = features["text_keys_order"]
         key_to_index = {key: index for index, key in enumerate(text_keys)}
 
         center = pooled.reshape(-1, pooled.size(-1)).mean(dim=0, keepdim=True)
@@ -338,7 +321,7 @@ class NeuralMDataset(Dataset):
 
         self.features = torch.cat([f_sub, f_comp, f_lit, f_para], dim=-1)
         self.labels = torch.tensor(
-            [float(item["label"]) for item in cache["metadata"]],
+            [float(item["label"]) for item in features["metadata"]],
             dtype=torch.float,
         )
 
@@ -400,7 +383,7 @@ def evaluate_neural_m(
 
 def train_neural_m(
     *,
-    cache: dict[str, Any],
+    features: dict[str, Any],
     output_dir: Path,
     epochs: int,
     batch_size: int,
@@ -414,7 +397,7 @@ def train_neural_m(
     dropout_2: float,
 ) -> dict[str, Any]:
     set_seed(seed)
-    dataset = NeuralMDataset(cache)
+    dataset = NeuralMDataset(features)
     train_indices, val_indices = stratified_split(dataset.labels.tolist(), val_ratio=val_ratio, seed=seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -529,57 +512,178 @@ def train_neural_m(
     return payload
 
 
+def suggest_params(trial: optuna.Trial) -> dict[str, Any]:
+    return {
+        "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64]),
+        "lr": trial.suggest_categorical("lr", [1e-4, 5e-4, 1e-3]),
+        "weight_decay": trial.suggest_categorical("weight_decay", [1e-5, 1e-4, 1e-3, 1e-2]),
+        "hidden_1": trial.suggest_categorical("hidden_1", [256, 512, 1024]),
+        "hidden_2": trial.suggest_categorical("hidden_2", [64, 128, 256]),
+        "dropout_1": trial.suggest_float("dropout_1", 0.1, 0.5, step=0.1),
+        "dropout_2": trial.suggest_float("dropout_2", 0.1, 0.5, step=0.1),
+    }
+
+
+def tune_hyperparameters(
+    *,
+    features: dict[str, Any],
+    output_dir: Path,
+    tune_epochs: int,
+    val_ratio: float,
+    seeds: list[int],
+    n_trials: int,
+) -> tuple[dict[str, Any], optuna.Study]:
+    import optuna
+
+    trial_seed = seeds[0]
+
+    def objective(trial: optuna.Trial) -> float:
+        params = suggest_params(trial)
+        result = train_neural_m(
+            features=features,
+            output_dir=output_dir / "optuna_trials" / f"trial_{trial.number}",
+            epochs=tune_epochs,
+            val_ratio=val_ratio,
+            seed=trial_seed,
+            **params,
+        )
+        score = float(result["best_val_f1"])
+        trial.report(score, tune_epochs)
+        return score
+
+    study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner())
+    study.optimize(objective, n_trials=n_trials)
+    return dict(study.best_trial.params), study
+
+
+def run_seed_sweep(
+    *,
+    features: dict[str, Any],
+    output_dir: Path,
+    final_epochs: int,
+    val_ratio: float,
+    seeds: list[int],
+    params: dict[str, Any],
+) -> list[dict[str, Any]]:
+    results = []
+    for seed in seeds:
+        results.append(
+            train_neural_m(
+                features=features,
+                output_dir=output_dir / f"seed_{seed}",
+                epochs=final_epochs,
+                val_ratio=val_ratio,
+                seed=seed,
+                **params,
+            )
+        )
+    return results
+
+
+def summarize_results(
+    *,
+    output_dir: Path,
+    best_params: dict[str, Any],
+    study: optuna.Study | None,
+    seed_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    f1_scores = [float(result["best_val_f1"]) for result in seed_results]
+    best_result = max(seed_results, key=lambda result: float(result["best_val_f1"]))
+    mean_f1 = sum(f1_scores) / max(1, len(f1_scores))
+    payload = {
+        "name": "neural_m",
+        "best_params": best_params,
+        "best_seed": best_result["seed"],
+        "best_val_f1": best_result["best_val_f1"],
+        "mean_val_f1": mean_f1,
+        "std_val_f1": (sum((score - mean_f1) ** 2 for score in f1_scores) / len(f1_scores)) ** 0.5
+        if f1_scores
+        else 0.0,
+        "seed_results": seed_results,
+    }
+    if study is not None:
+        payload["optuna"] = {
+            "best_trial": study.best_trial.number,
+            "best_value": study.best_trial.value,
+            "trials": [
+                {"number": trial.number, "value": trial.value, "params": trial.params, "state": str(trial.state)}
+                for trial in study.trials
+            ],
+        }
+    save_json(output_dir / "metrics.json", payload)
+    save_json(output_dir / "best_params.json", best_params)
+    return payload
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the LLM perturbation-vector Neural M baseline.")
     parser.add_argument("--csv_path", default=str(DEFAULT_CSV_PATH))
     parser.add_argument("--llm_results_dir", default=str(DEFAULT_LLM_RESULTS_DIR))
-    parser.add_argument("--cache_path", default=str(DEFAULT_CACHE_PATH))
     parser.add_argument("--output_dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--final_epochs", type=int, default=None)
+    parser.add_argument("--tune_epochs", type=int, default=5)
+    parser.add_argument("--n_trials", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--encode_batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--max_length", type=int, default=128)
     parser.add_argument("--val_ratio", type=float, default=0.15)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44, 45, 46])
     parser.add_argument("--limit", type=int, default=512, help="Use 0 for all matched LLM records.")
     parser.add_argument("--hidden_1", type=int, default=512)
     parser.add_argument("--hidden_2", type=int, default=128)
     parser.add_argument("--dropout_1", type=float, default=0.2)
     parser.add_argument("--dropout_2", type=float, default=0.2)
-    parser.add_argument("--force_rebuild_cache", action="store_true")
+    parser.add_argument("--skip_tuning", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    cache = build_or_load_cache(
-        cache_path=Path(args.cache_path),
+    output_dir = Path(args.output_dir)
+    final_epochs = args.final_epochs if args.final_epochs is not None else args.epochs
+    features = build_neural_m_features(
         csv_path=Path(args.csv_path),
         llm_results_dir=Path(args.llm_results_dir),
         model_name=args.model_name,
         max_length=args.max_length,
         encode_batch_size=args.encode_batch_size,
         limit=args.limit,
-        seed=args.seed,
-        force_rebuild=args.force_rebuild_cache,
+        seed=args.seeds[0],
     )
-    train_neural_m(
-        cache=cache,
-        output_dir=Path(args.output_dir),
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        weight_decay=args.weight_decay,
+    if args.skip_tuning:
+        best_params = {
+            "batch_size": args.batch_size,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "hidden_1": args.hidden_1,
+            "hidden_2": args.hidden_2,
+            "dropout_1": args.dropout_1,
+            "dropout_2": args.dropout_2,
+        }
+        study = None
+    else:
+        best_params, study = tune_hyperparameters(
+            features=features,
+            output_dir=output_dir,
+            tune_epochs=args.tune_epochs,
+            val_ratio=args.val_ratio,
+            seeds=args.seeds,
+            n_trials=args.n_trials,
+        )
+
+    seed_results = run_seed_sweep(
+        features=features,
+        output_dir=output_dir,
+        final_epochs=final_epochs,
         val_ratio=args.val_ratio,
-        seed=args.seed,
-        hidden_1=args.hidden_1,
-        hidden_2=args.hidden_2,
-        dropout_1=args.dropout_1,
-        dropout_2=args.dropout_2,
+        seeds=args.seeds,
+        params=best_params,
     )
+    summarize_results(output_dir=output_dir, best_params=best_params, study=study, seed_results=seed_results)
 
 
 if __name__ == "__main__":

@@ -327,6 +327,7 @@ def run_training(
     epochs: int,
     batch_size: int,
     lr: float,
+    weight_decay: float,
     max_length: int,
     val_ratio: float,
     seed: int,
@@ -382,6 +383,7 @@ def run_training(
     optimizer = torch.optim.AdamW(
         (parameter for parameter in model.parameters() if parameter.requires_grad),
         lr=lr,
+        weight_decay=weight_decay,
     )
     criterion = nn.BCEWithLogitsLoss()
 
@@ -456,6 +458,7 @@ def run_training(
         "epochs": epochs,
         "batch_size": batch_size,
         "lr": lr,
+        "weight_decay": weight_decay,
         "max_length": max_length,
         "val_ratio": val_ratio,
         "seed": seed,
@@ -500,10 +503,12 @@ def train_old_marked_input(
     epochs: int = 1,
     batch_size: int = 16,
     lr: float = 1e-4,
+    weight_decay: float = 1e-2,
     max_length: int = 128,
     val_ratio: float = 0.15,
     seed: int = 42,
     limit: int = 512,
+    dropout: float = 0.1,
     unfreeze_encoder: bool = False,
 ) -> dict[str, Any]:
     return run_training(
@@ -516,13 +521,132 @@ def train_old_marked_input(
         epochs=epochs,
         batch_size=batch_size,
         lr=lr,
+        weight_decay=weight_decay,
         max_length=max_length,
         val_ratio=val_ratio,
         seed=seed,
         limit=limit,
         model_name=model_name,
         unfreeze_encoder=unfreeze_encoder,
+        dropout=dropout,
     )
+
+
+def suggest_params(trial: optuna.Trial) -> dict[str, Any]:
+    return {
+        "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64]),
+        "lr": trial.suggest_categorical("lr", [1e-4, 5e-4, 1e-3]),
+        "weight_decay": trial.suggest_categorical("weight_decay", [1e-5, 1e-4, 1e-3, 1e-2]),
+        "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),
+    }
+
+
+def tune_hyperparameters(
+    *,
+    csv_path: str | Path,
+    output_dir: Path,
+    model_name: str,
+    tune_epochs: int,
+    max_length: int,
+    val_ratio: float,
+    seeds: list[int],
+    limit: int,
+    n_trials: int,
+    unfreeze_encoder: bool,
+) -> tuple[dict[str, Any], optuna.Study]:
+    import optuna
+
+    trial_seed = seeds[0]
+
+    def objective(trial: optuna.Trial) -> float:
+        params = suggest_params(trial)
+        result = train_old_marked_input(
+            csv_path=csv_path,
+            output_dir=output_dir / "optuna_trials" / f"trial_{trial.number}",
+            model_name=model_name,
+            epochs=tune_epochs,
+            max_length=max_length,
+            val_ratio=val_ratio,
+            seed=trial_seed,
+            limit=limit,
+            unfreeze_encoder=unfreeze_encoder,
+            **params,
+        )
+        score = float(result["best_val_f1"])
+        trial.report(score, tune_epochs)
+        return score
+
+    study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner())
+    study.optimize(objective, n_trials=n_trials)
+    return dict(study.best_trial.params), study
+
+
+def run_seed_sweep(
+    *,
+    csv_path: str | Path,
+    output_dir: Path,
+    model_name: str,
+    final_epochs: int,
+    max_length: int,
+    val_ratio: float,
+    seeds: list[int],
+    limit: int,
+    unfreeze_encoder: bool,
+    params: dict[str, Any],
+) -> list[dict[str, Any]]:
+    results = []
+    for seed in seeds:
+        results.append(
+            train_old_marked_input(
+                csv_path=csv_path,
+                output_dir=output_dir / f"seed_{seed}",
+                model_name=model_name,
+                epochs=final_epochs,
+                max_length=max_length,
+                val_ratio=val_ratio,
+                seed=seed,
+                limit=limit,
+                unfreeze_encoder=unfreeze_encoder,
+                **params,
+            )
+        )
+    return results
+
+
+def summarize_results(
+    *,
+    output_dir: Path,
+    best_params: dict[str, Any],
+    study: optuna.Study | None,
+    seed_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    f1_scores = [float(result["best_val_f1"]) for result in seed_results]
+    best_result = max(seed_results, key=lambda result: float(result["best_val_f1"]))
+    payload = {
+        "name": "old_marked_input",
+        "best_params": best_params,
+        "best_seed": best_result["seed"],
+        "best_val_f1": best_result["best_val_f1"],
+        "mean_val_f1": sum(f1_scores) / max(1, len(f1_scores)),
+        "seed_results": seed_results,
+    }
+    if len(f1_scores) > 1:
+        mean_f1 = payload["mean_val_f1"]
+        payload["std_val_f1"] = (sum((score - mean_f1) ** 2 for score in f1_scores) / len(f1_scores)) ** 0.5
+    else:
+        payload["std_val_f1"] = 0.0
+    if study is not None:
+        payload["optuna"] = {
+            "best_trial": study.best_trial.number,
+            "best_value": study.best_trial.value,
+            "trials": [
+                {"number": trial.number, "value": trial.value, "params": trial.params, "state": str(trial.state)}
+                for trial in study.trials
+            ],
+        }
+    save_json(output_dir / "metrics.json", payload)
+    save_json(output_dir / "best_params.json", best_params)
+    return payload
 
 
 def parse_args() -> argparse.Namespace:
@@ -531,31 +655,61 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output_dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--model_name", default="xlm-roberta-base")
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--final_epochs", type=int, default=None)
+    parser.add_argument("--tune_epochs", type=int, default=5)
+    parser.add_argument("--n_trials", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
     parser.add_argument("--max_length", type=int, default=128)
     parser.add_argument("--val_ratio", type=float, default=0.15)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44, 45, 46])
     parser.add_argument("--limit", type=int, default=512, help="Use 0 for the full CSV.")
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--skip_tuning", action="store_true")
     parser.add_argument("--unfreeze_encoder", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    train_old_marked_input(
+    output_dir = Path(args.output_dir)
+    final_epochs = args.final_epochs if args.final_epochs is not None else args.epochs
+    if args.skip_tuning:
+        best_params = {
+            "batch_size": args.batch_size,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "dropout": args.dropout,
+        }
+        study = None
+    else:
+        best_params, study = tune_hyperparameters(
+            csv_path=args.csv_path,
+            output_dir=output_dir,
+            model_name=args.model_name,
+            tune_epochs=args.tune_epochs,
+            max_length=args.max_length,
+            val_ratio=args.val_ratio,
+            seeds=args.seeds,
+            limit=args.limit,
+            n_trials=args.n_trials,
+            unfreeze_encoder=args.unfreeze_encoder,
+        )
+
+    seed_results = run_seed_sweep(
         csv_path=args.csv_path,
-        output_dir=args.output_dir,
+        output_dir=output_dir,
         model_name=args.model_name,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
+        final_epochs=final_epochs,
         max_length=args.max_length,
         val_ratio=args.val_ratio,
-        seed=args.seed,
+        seeds=args.seeds,
         limit=args.limit,
         unfreeze_encoder=args.unfreeze_encoder,
+        params=best_params,
     )
+    summarize_results(output_dir=output_dir, best_params=best_params, study=study, seed_results=seed_results)
 
 
 if __name__ == "__main__":
