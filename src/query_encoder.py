@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from difflib import SequenceMatcher
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -41,7 +41,18 @@ class FrozenPCAProjection(nn.Module):
 
 
 class QueryEncoder(nn.Module):
-    FUZZY_SPAN_THRESHOLD = 0.50
+    # Robust thresholds for noisy multilingual datasets
+    TOKEN_SIMILARITY_THRESHOLD = 0.60
+    IDIOM_COVERAGE_THRESHOLD = 0.35
+
+    # Cyrillic to Latin map for Serbian and similar languages
+    CYRILLIC_TO_LATIN = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ђ': 'đ', 'е': 'e',
+        'ж': 'ž', 'з': 'z', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l', 'љ': 'lj',
+        'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's',
+        'т': 't', 'ћ': 'ć', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'č',
+        'џ': 'dž', 'ш': 'š'
+    }
 
     def __init__(self, config: QueryEncoderConfig = QueryEncoderConfig()) -> None:
         super().__init__()
@@ -69,73 +80,86 @@ class QueryEncoder(nn.Module):
         else:
             self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
 
-    @staticmethod
-    def find_compound_span(sentence: str, compound: str) -> Tuple[int, int]:
-        """Case-insensitive character offset of compound in sentence."""
-        start = sentence.lower().find(compound.lower())
-        if start != -1:
-            return start, start + len(compound)
-
-        fuzzy_span = QueryEncoder.find_fuzzy_compound_span(
-            sentence=sentence,
-            compound=compound,
-        )
-        if fuzzy_span is None:
-            raise ValueError(f"compound not found in sentence: {compound}")
-
-        return fuzzy_span
-
-    @staticmethod
-    def normalize_for_match(value: str) -> str:
-        """Normalize text for approximate span matching."""
-        decomposed = unicodedata.normalize("NFKD", value.casefold())
-        return "".join(
-            char for char in decomposed
-            if not unicodedata.combining(char)
-        )
-
-    @staticmethod
-    def word_spans(text: str) -> list[tuple[str, int, int]]:
-        """Return word tokens with original character spans."""
-        return [
-            (match.group(0), match.start(), match.end())
-            for match in re.finditer(r"\w+", text, flags=re.UNICODE)
-        ]
-
-    @staticmethod
-    def find_fuzzy_compound_span(
-        sentence: str,
-        compound: str,
-    ) -> Tuple[int, int] | None:
-        """Find a close variant of the compound using character-level sliding window."""
-        norm_s = QueryEncoder.normalize_for_match(sentence)
-        norm_c = QueryEncoder.normalize_for_match(compound)
+    @classmethod
+    def normalize_text(cls, text: str) -> str:
+        """Karakter standardizasyonu, transliterasyon ve aksan temizliği."""
+        if not text: return ""
+        text = text.casefold()
         
-        c_len = len(norm_c)
-        if c_len == 0 or len(norm_s) < c_len:
-            return None
+        # Cyrillic -> Latin (Serbian/Russian cases)
+        for cyr, lat in cls.CYRILLIC_TO_LATIN.items():
+            text = text.replace(cyr, lat)
+            
+        # Uzbek apostrophes standardization
+        text = text.replace('ʻ', "'").replace('’', "'").replace('`', "'")
+        
+        decomposed = unicodedata.normalize("NFKD", text)
+        return "".join(char for char in decomposed if not unicodedata.combining(char))
 
-        best_score = 0.0
-        best_char_span: tuple[int, int] | None = None
+    @staticmethod
+    def get_universal_tokens(text: str) -> List[Tuple[str, int, int]]:
+        """Extracts language-agnostic tokens (handles CJK and alphabetic scripts)."""
+        tokens = []
+        # Pattern: Chinese char block OR alphabetic word characters
+        pattern = re.compile(r"[\u4e00-\u9FFF]|[^\W_]+", flags=re.UNICODE)
+        for match in pattern.finditer(text):
+            tokens.append((match.group(0), match.start(), match.end()))
+        return tokens
 
-        # Character-level sliding window (Handles Chinese and inflections)
-        # We search in a range around the original compound length
-        for w_len in range(max(1, c_len - 2), c_len + 3):
-            for i in range(len(norm_s) - w_len + 1):
-                window = norm_s[i : i + w_len]
-                score = SequenceMatcher(None, norm_c, window).ratio()
+    @staticmethod
+    def clean_compound(compound: str) -> str:
+        """Cleans trailing numbers (Turkish dataset artifacts)."""
+        return re.sub(r'\s+\d+$', '', compound)
+
+    def find_compound_spans(self, sentence: str, compound: str) -> List[Tuple[int, int]]:
+        """
+        Multi-span alignment with fallback. Returns empty list if coverage is too low.
+        """
+        compound = self.clean_compound(compound)
+        
+        # Phase 1: Exact Match
+        exact_match = re.search(re.escape(compound), sentence, flags=re.IGNORECASE)
+        if exact_match:
+            return [exact_match.span()]
+
+        # Phase 2: Morphological Token Alignment
+        s_tokens = self.get_universal_tokens(sentence)
+        c_tokens = self.get_universal_tokens(compound)
+
+        if not s_tokens or not c_tokens:
+            return [] # Triggers Fallback
+
+        matched_spans = []
+        matched_c_indices = set()
+
+        for c_idx, (c_word, _, _) in enumerate(c_tokens):
+            norm_c = self.normalize_text(c_word)
+            best_score = 0.0
+            best_span = None
+
+            for s_word, s_start, s_end in s_tokens:
+                norm_s = self.normalize_text(s_word)
+                
+                # Substring match for joined words (e.g., xomsemiz)
+                if norm_c in norm_s and len(norm_c) >= 3:
+                    score = 1.0
+                else:
+                    score = SequenceMatcher(None, norm_c, norm_s).ratio()
                 
                 if score > best_score:
                     best_score = score
-                    # Map normalized index back to original sentence index? 
-                    # For simplicity and since normalization here is just case/accent, 
-                    # the indices should roughly align.
-                    best_char_span = (i, i + w_len)
+                    best_span = (s_start, s_end)
 
-        if best_char_span is None or best_score < QueryEncoder.FUZZY_SPAN_THRESHOLD:
-            return None
+            if best_score >= self.TOKEN_SIMILARITY_THRESHOLD and best_span:
+                matched_spans.append(best_span)
+                matched_c_indices.add(c_idx)
 
-        return best_char_span
+        # Phase 3: Coverage Validation
+        coverage = len(matched_c_indices) / len(c_tokens)
+        if coverage < self.IDIOM_COVERAGE_THRESHOLD or not matched_spans:
+            return [] # Triggers Fallback
+
+        return sorted(list(set(matched_spans)), key=lambda x: x[0])
 
     @staticmethod
     def mean_pool(
@@ -143,12 +167,11 @@ class QueryEncoder(nn.Module):
         attention_mask: torch.Tensor,
         offset_mapping: torch.Tensor,
     ) -> torch.Tensor:
-        """Mean pool over real sentence tokens, excluding padding and special tokens."""
+        """Mean pool over real tokens, excluding padding and special tokens."""
         real_token_mask = (
             (attention_mask == 1)
             & (offset_mapping[:, :, 0] != offset_mapping[:, :, 1])
         )
-
         mask = real_token_mask.unsqueeze(-1).float()
         summed = (hidden_states * mask).sum(dim=1)
         counts = mask.sum(dim=1).clamp(min=1e-9)
@@ -158,43 +181,48 @@ class QueryEncoder(nn.Module):
     def target_span_pool(
         hidden_states: torch.Tensor,
         offset_mapping: torch.Tensor,
-        spans: List[Tuple[int, int]],
+        spans_list: List[List[Tuple[int, int]]],
+        q_sentences: torch.Tensor,
     ) -> torch.Tensor:
-        """Mean pool over tokens overlapping the compound span."""
+        """
+        Pool vectors from the idiom parts. 
+        Falls back to the full sentence mean if no idiom parts were found.
+        """
         batch_vectors: list[torch.Tensor] = []
 
-        for batch_idx, span in enumerate(spans):
-            target_start, target_end = span
-            token_vectors: list[torch.Tensor] = []
+        for batch_idx, spans in enumerate(spans_list):
+            # Fallback: if spans are empty, use the clean sentence vector
+            if not spans:
+                batch_vectors.append(q_sentences[batch_idx])
+                continue
 
+            token_vectors: list[torch.Tensor] = []
             for token_idx in range(offset_mapping.size(1)):
                 tok_s = int(offset_mapping[batch_idx, token_idx, 0])
                 tok_e = int(offset_mapping[batch_idx, token_idx, 1])
+                if tok_s == tok_e: continue
 
-                if tok_s == tok_e:
-                    continue
-
-                overlaps_target = tok_s < target_end and tok_e > target_start
-
-                if overlaps_target:
+                is_idiom_part = any(tok_s < end and tok_e > start for start, end in spans)
+                if is_idiom_part:
                     token_vectors.append(hidden_states[batch_idx, token_idx])
 
             if len(token_vectors) == 0:
-                raise ValueError("No tokenizer tokens overlap the compound span.")
-
-            batch_vectors.append(torch.stack(token_vectors).mean(dim=0))
+                batch_vectors.append(q_sentences[batch_idx])
+            else:
+                batch_vectors.append(torch.stack(token_vectors).mean(dim=0))
 
         return torch.stack(batch_vectors)
 
     def encode_raw(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
-        """Build [Q_sentence ; Q_target] before the final query projection."""
+        """Main encoding pipeline [Q_sentence ; Q_target]."""
         if len(sentences) != len(compounds):
             raise ValueError("sentences and compounds must have the same length.")
 
-        spans = [
-            self.find_compound_span(sentence, compound)
+        spans_list = [
+            self.find_compound_spans(sentence, compound)
             for sentence, compound in zip(sentences, compounds)
         ]
+        
         encoded = self.tokenizer(
             sentences,
             padding=True,
@@ -220,25 +248,16 @@ class QueryEncoder(nn.Module):
         q_target = self.target_span_pool(
             hidden_states=hidden_states,
             offset_mapping=offset_mapping,
-            spans=spans,
+            spans_list=spans_list,
+            q_sentences=q_sentence, # Passed for safe fallback
         )
 
         q_raw = torch.cat([q_sentence, q_target], dim=-1)
         return q_raw
 
     def forward(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
-        """Encode sentence-compound pairs into query vectors [B, shared_dim]."""
+        """Final query projection and normalization."""
         q_raw = self.encode_raw(sentences=sentences, compounds=compounds)
         q = self.projection(q_raw)
-
         q = F.normalize(q, p=2, dim=-1)
-
-        if self.config.debug:
-            print(
-                "[QueryEncoder] "
-                f"device={q.device} "
-                f"batch={len(sentences)} "
-            )
-            print("[QueryEncoder] sentence encoded, target pooled, combined into Q")
-
         return q

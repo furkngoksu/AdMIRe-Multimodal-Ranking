@@ -19,7 +19,11 @@ def main():
     failed_samples = []
     tsv_files = sorted(SUBMISSION_TSV_DIR.glob("*.tsv"))
     
-    print(f"Checking {len(tsv_files)} languages...")
+    # Initialize encoder temporarily to access class methods
+    from src.config import QueryEncoderConfig
+    encoder = QueryEncoder(QueryEncoderConfig())
+
+    print(f"Checking {len(tsv_files)} languages with Multi-Span Alignment...")
 
     for tsv_path in tsv_files:
         lang = tsv_path.stem.replace("submission_", "")
@@ -29,24 +33,24 @@ def main():
                 compound = row["compound"].strip()
                 sentence = row["sentence"].strip()
                 
-                # Check Exact Match
-                exact_start = sentence.lower().find(compound.lower())
-                is_exact = exact_start != -1
-                
                 try:
-                    start, end = QueryEncoder.find_compound_span(sentence, compound)
-                    matched_text = sentence[start:end]
+                    # New Multi-Span Logic
+                    spans = encoder.find_compound_spans(sentence, compound)
                     
-                    # For score calculation
-                    from difflib import SequenceMatcher
-                    norm_s = QueryEncoder.normalize_for_match(matched_text)
-                    norm_c = QueryEncoder.normalize_for_match(compound)
-                    score = SequenceMatcher(None, norm_c, norm_s).ratio()
+                    # Exact if it's a single span and matches exactly
+                    is_exact = False
+                    if len(spans) == 1:
+                        s, e = spans[0]
+                        if sentence[s:e].lower() == compound.lower():
+                            is_exact = True
+                    
+                    matched_parts = [sentence[s:e] for s, e in spans]
+                    matched_text = " | ".join(matched_parts)
                     
                     results.append({
                         "lang": lang,
-                        "match_type": "EXACT" if is_exact else "FUZZY",
-                        "score": round(score, 3),
+                        "match_type": "EXACT" if is_exact else f"FUZZY({len(spans)})",
+                        "score": "N/A", # Multi-span has individual scores
                         "compound": compound,
                         "matched_text": matched_text,
                         "sentence": sentence
@@ -73,20 +77,18 @@ def main():
     
     if failed_samples:
         print("\n" + "="*50)
-        print("CRITICAL: FAILED SAMPLES (THRESHOLD TOO HIGH OR MISSING)")
+        print("CRITICAL: FAILED SAMPLES")
         print("="*50)
         for i, f in enumerate(failed_samples, 1):
-            print(f"{i}. [{f['lang']}] Compound: {f['compound']}")
+            print(f"{i}. [{f['lang']}] {f['compound']}")
             print(f"   Sentence: {f['sentence']}")
             print("-" * 30)
-    else:
-        print("\nNo failures found!")
-
-    fuzzy_count = sum(1 for r in results if r["match_type"] == "FUZZY")
+    
+    fuzzy_count = sum(1 for r in results if "FUZZY" in r["match_type"])
     fail_count = len(failed_samples)
     print(f"\nSummary:")
     print(f"  Exact: {len(results) - fuzzy_count - fail_count}")
-    print(f"  Fuzzy: {fuzzy_count}")
+    print(f"  Fuzzy (Multi-Span): {fuzzy_count}")
     print(f"  Failed: {fail_count}")
 
 if __name__ == "__main__":
