@@ -18,12 +18,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # --- Project imports ---
-from ranking_experiments.runner import (  # noqa: E402
+from src.utils import (  # noqa: E402
     RankingExperimentConfig,
-    build_query_projection,
-    load_cache,
+    read_m_scores,
+    load_weights,
 )
-from ranking_experiments.train_data import read_m_scores  # noqa: E402
 from src.candidate_fusion import GatedCandidateFusion  # noqa: E402
 from src.caption_encoder import CaptionEncoder  # noqa: E402
 from src.config import QueryFusionConfig, get_device  # noqa: E402
@@ -31,10 +30,9 @@ from src.image_encoder import ImageEncoder  # noqa: E402
 from src.query_encoder import QueryEncoder  # noqa: E402
 from src.query_fusion import build_query_fusion  # noqa: E402
 from src.ranker import CosineRanker  # noqa: E402
-from src.weights import load_weights  # noqa: E402
 
 # --- Constants ---
-SUMMARY_PATH = REPO_ROOT / "ranking_experiments/hyperparam_tuning/best_model/output/summary.json"
+SUMMARY_PATH = REPO_ROOT / "ranking_experiments/tuning_predicted/final_model/summary.json"
 M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal_final/output/submission_m_scores.tsv"
 SUBMISSION_TSV_DIR = REPO_ROOT / "admire2_submission/admire2_sentences"
 SUBMISSION_DATA_DIR = REPO_ROOT / "admire2_submission/admire2_data"
@@ -124,14 +122,26 @@ def load_ranking_modules(
         summary = json.load(file)
 
     best_run = max(summary["runs"], key=lambda run: float(run["best_dev"]["ndcg"]))
-    weights_path = Path(best_run["weights_path"])
+    weights_path = REPO_ROOT / "ranking_experiments/tuning_predicted/final_model" / f"seed{best_run['experiment']['seed']}" / "weights.pt"
     experiment_config = RankingExperimentConfig(**best_run["experiment"])
 
-    cache = load_cache()
-    query_projection, _ = build_query_projection(
-        experiment_config,
-        cache["splits"]["train"]["q_raw"],
-        device,
+    # Load weights first to get shapes, avoiding cache dependency
+    print(f"[info] Loading best model weights: {weights_path}")
+    weights = torch.load(weights_path, map_location=device)
+
+    # Initialize modules using shapes from weights
+    from src.query_encoder import FrozenPCAProjection
+    
+    # Extract shapes from query_projection state dict in the weights file
+    proj_sd = weights["query_projection"]
+    mean_shape = proj_sd["mean"].shape
+    comp_shape = proj_sd["components"].shape
+    
+    # Create projection matching exactly what is on disk
+    query_projection = FrozenPCAProjection(
+        mean=torch.zeros(mean_shape, device=device),
+        components=torch.zeros(comp_shape, device=device),
+        output_dim=512
     )
 
     query_fusion_config = QueryFusionConfig(
@@ -148,8 +158,9 @@ def load_ranking_modules(
         "candidate_fusion": candidate_fusion,
     }
 
-    print(f"[info] Loading best model weights: {weights_path}")
-    load_weights(modules, str(weights_path), device)
+    print(f"[info] Applying weights to modules...")
+    for name, module in modules.items():
+        module.load_state_dict(weights[name])
 
     for module in modules.values():
         module.eval()

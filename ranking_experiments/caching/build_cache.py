@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -16,14 +16,14 @@ from src.caption_encoder import CaptionEncoder
 from src.config import get_device
 from src.image_encoder import ImageEncoder
 from src.query_encoder import QueryEncoder
-from ranking_experiments.train_data import (
+from ranking_experiments.data_loader import (
     collate_train_samples,
     load_train_samples,
     read_m_scores,
 )
 
 
-CACHE_PATH = REPO_ROOT / "ranking_experiments/cache/admire_rank_cache.pt"
+CACHE_PATH = REPO_ROOT / "ranking_experiments/caching/cache/admire_rank_cache.pt"
 M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal_final/output/admire_train_scores.tsv"
 CACHE_BATCH_SIZE = 4
 
