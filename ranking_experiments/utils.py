@@ -100,9 +100,14 @@ def train_one_epoch(modules: dict[str, nn.Module], loader: DataLoader, optimizer
         optimizer.zero_grad(set_to_none=True)
         scores = forward_scores(batch, experiment.m_source, query_projection, query_fusion, candidate_fusion, ranker, device)
         loss = listwise_ranking_loss(scores, gold_relevance)
-        loss.backward(); optimizer.step()
+        loss.backward()
+        optimizer.step()
+        
+        # Removed clamping to allow model to find its own optimum logit scale
+        
         total_loss += loss.item() * gold_relevance.size(0); total_examples += gold_relevance.size(0)
         progress.set_postfix(loss=f"{loss.item():.4f}")
+    
     return total_loss / total_examples
 
 def evaluate(modules: dict[str, nn.Module], loader: DataLoader, split_name: str, m_source: str, device: torch.device) -> dict[str, float]:

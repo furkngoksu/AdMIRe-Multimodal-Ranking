@@ -76,6 +76,7 @@ def run_training_flow(experiment: RankingExperimentConfig, output_dir: Path, loa
         params.extend([p for p in mod.parameters() if p.requires_grad])
         
     optimizer = torch.optim.AdamW(params, lr=experiment.learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=experiment.epochs)
     
     best_ndcg = -1.0
     best_metrics = None
@@ -84,6 +85,7 @@ def run_training_flow(experiment: RankingExperimentConfig, output_dir: Path, loa
     for epoch in range(1, experiment.epochs + 1):
         train_one_epoch(trained_modules, loaders["train"], optimizer, device, epoch, experiment)
         dev_metrics = evaluate(trained_modules, loaders["dev"], "dev", experiment.m_source, device)
+        scheduler.step()
         
         if dev_metrics["ndcg"] > best_ndcg:
             best_ndcg = dev_metrics["ndcg"]
@@ -126,9 +128,9 @@ def objective(trial):
         m_embedding_dim=64,
         seed=42,
         fusion_type=SELECTED_ARCHITECTURE,
-        epochs=trial.suggest_int("epochs", 15, 25),
-        batch_size=trial.suggest_categorical("batch_size", [8, 16]),
-        learning_rate=trial.suggest_float("learning_rate", 5e-5, 3e-4, log=True),
+        epochs=trial.suggest_int("epochs", 30, 50),
+        batch_size=trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
+        learning_rate=trial.suggest_float("learning_rate", 8e-5, 5e-4, log=True),
         query_projection=PROJECTION_TYPE,
         logit_scale_learnable=LEARNABLE_LOGIT_SCALE
     )
@@ -138,11 +140,10 @@ def objective(trial):
     return result["best_dev"]["ndcg"]
 
 def aggregate_results(results):
-    from statistics import mean
-    agg = {}
-    for split in ("best_dev", "test", "xeval"):
-        agg[split] = {m: mean(float(run[split][m]) for run in results) for m in ("loss", "top1", "ndcg")}
-    return agg
+    best_dev = {"loss": sum(r["best_dev"]["loss"] for r in results) / len(results), "top1": sum(r["best_dev"]["top1"] for r in results) / len(results), "ndcg": sum(r["best_dev"]["ndcg"] for r in results) / len(results)}
+    test = {"loss": sum(r["test"]["loss"] for r in results) / len(results), "top1": sum(r["test"]["top1"] for r in results) / len(results), "ndcg": sum(r["test"]["ndcg"] for r in results) / len(results)}
+    xeval = {"loss": sum(r["xeval"]["loss"] for r in results) / len(results), "top1": sum(r["xeval"]["top1"] for r in results) / len(results), "ndcg": sum(r["xeval"]["ndcg"] for r in results) / len(results)}
+    return {"best_dev": best_dev, "test": test, "xeval": xeval}
 
 def main():
     TUNING_DIR.mkdir(parents=True, exist_ok=True)
@@ -160,12 +161,12 @@ def main():
             seed=seed, 
             fusion_type=SELECTED_ARCHITECTURE, 
             epochs=20, 
-            batch_size=8, 
+            batch_size=32, # Increased default batch size
             learning_rate=1e-4,
             query_projection=PROJECTION_TYPE,
             logit_scale_learnable=LEARNABLE_LOGIT_SCALE
         )
-        loaders = build_loaders(cache, 8, seed)
+        loaders = build_loaders(cache, 32, seed)
         res = run_training_flow(exp, BASELINE_DIR / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
         baseline_runs.append(res)
     save_json({"aggregate": [aggregate_results(baseline_runs)], "runs": baseline_runs}, BASELINE_DIR / "summary.json")
