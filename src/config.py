@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import torch
 
 
-@dataclass(frozen=True)
+@dataclass
 class PipelineDataConfig:
     tsv_path: str = "admire2_submission/admire2_sentences/submission_Turkish.tsv"
     image_root: str = "admire2_submission/admire2_data/Turkish"
@@ -15,21 +15,21 @@ class PipelineDataConfig:
     batch_size: int = 1
 
 
-@dataclass(frozen=True)
+@dataclass
 class WeightsConfig:
     ranking_weights_path: str = "ranking_experiments/gold_m_ablation_pca/output/m64/seed100/weights.pt"
 
 
-@dataclass(frozen=True)
+@dataclass
 class QueryEncoderConfig:
     model_name: str = "xlm-roberta-base"
     shared_dim: int = 512
     max_length: int = 128
     query_projection_type: str = "pca"  # "pca" or "linear"
-    debug: bool = False
+    debug: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass
 class CaptionEncoderConfig:
     model_name: str = "sentence-transformers/clip-ViT-B-32-multilingual-v1"
     shared_dim: int = 512
@@ -37,14 +37,14 @@ class CaptionEncoderConfig:
     debug: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass
 class ImageEncoderConfig:
     model_name: str = "sentence-transformers/clip-ViT-B-32"
     shared_dim: int = 512
     debug: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass
 class QueryFusionConfig:
     shared_dim: int = 512
     m_embedding_dim: int = 64
