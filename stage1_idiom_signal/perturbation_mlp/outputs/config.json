@@ -1,0 +1,31 @@
+{
+  "model_name": "xlm-roberta-base",
+  "max_length": 128,
+  "input_format": "abs(target - perturbation) difference vectors",
+  "head_type": "mlp_bn_gelu",
+  "feature_dim": 3072,
+  "encoder_frozen": true,
+  "hyperparameters": {
+    "hidden_1": 256,
+    "hidden_2": 64,
+    "dropout_1": 0.30000000000000004,
+    "dropout_2": 0.4,
+    "lr": 0.0001,
+    "weight_decay": 1e-05,
+    "batch_size": 64
+  },
+  "optuna_seeds": [
+    42,
+    100,
+    150
+  ],
+  "final_seeds": [
+    42,
+    100,
+    150,
+    200,
+    250
+  ],
+  "optuna_epochs": 30,
+  "final_epochs": 40
+}

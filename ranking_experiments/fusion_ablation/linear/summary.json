@@ -1,0 +1,264 @@
+{
+  "runs": [
+    {
+      "name": "concat_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.4209006684167045,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.8576318366186959
+          },
+          "test": {
+            "loss": 1.529446772166661,
+            "top1": 0.2857142857142857,
+            "ndcg": 0.8120321035385132
+          },
+          "xeval": {
+            "loss": 1.7487428585688274,
+            "top1": 0.18162393187865233,
+            "ndcg": 0.749261892758883
+          },
+          "config": {
+            "name": "concat_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "concat",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.4209006684167045,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.8576318366186959
+          },
+          "test": {
+            "loss": 1.529446772166661,
+            "top1": 0.2857142857142857,
+            "ndcg": 0.8120321035385132
+          },
+          "xeval": {
+            "loss": 1.7487428585688274,
+            "top1": 0.18162393187865233,
+            "ndcg": 0.749261892758883
+          },
+          "config": {
+            "name": "concat_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "concat",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "gated_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.5585850477218628,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.824700551373618
+          },
+          "test": {
+            "loss": 1.5433600459780012,
+            "top1": 0.32142857142857145,
+            "ndcg": 0.8287294421877179
+          },
+          "xeval": {
+            "loss": 1.899200894893744,
+            "top1": 0.10897435897435898,
+            "ndcg": 0.6952781417430975
+          },
+          "config": {
+            "name": "gated_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "gated",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.5585850477218628,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.824700551373618
+          },
+          "test": {
+            "loss": 1.5433600459780012,
+            "top1": 0.32142857142857145,
+            "ndcg": 0.8287294421877179
+          },
+          "xeval": {
+            "loss": 1.899200894893744,
+            "top1": 0.10897435897435898,
+            "ndcg": 0.6952781417430975
+          },
+          "config": {
+            "name": "gated_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "gated",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "film_scale_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.487039395741054,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.8452823417527335
+          },
+          "test": {
+            "loss": 1.5331070252827235,
+            "top1": 0.32142857142857145,
+            "ndcg": 0.8312440855162484
+          },
+          "xeval": {
+            "loss": 1.856195914439666,
+            "top1": 0.11538461538461539,
+            "ndcg": 0.7023460299540789
+          },
+          "config": {
+            "name": "film_scale_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "film",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.487039395741054,
+            "top1": 0.5357142857142857,
+            "ndcg": 0.8452823417527335
+          },
+          "test": {
+            "loss": 1.5331070252827235,
+            "top1": 0.32142857142857145,
+            "ndcg": 0.8312440855162484
+          },
+          "xeval": {
+            "loss": 1.856195914439666,
+            "top1": 0.11538461538461539,
+            "ndcg": 0.7023460299540789
+          },
+          "config": {
+            "name": "film_scale_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "film",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "film_full_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.4324823107038225,
+            "top1": 0.6071428571428571,
+            "ndcg": 0.8797386288642883
+          },
+          "test": {
+            "loss": 1.492836696760995,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.8392816441399711
+          },
+          "xeval": {
+            "loss": 1.7283047284835424,
+            "top1": 0.19444444469916514,
+            "ndcg": 0.7511100004880856
+          },
+          "config": {
+            "name": "film_full_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "film_full",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.4324823107038225,
+            "top1": 0.6071428571428571,
+            "ndcg": 0.8797386288642883
+          },
+          "test": {
+            "loss": 1.492836696760995,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.8392816441399711
+          },
+          "xeval": {
+            "loss": 1.7283047284835424,
+            "top1": 0.19444444469916514,
+            "ndcg": 0.7511100004880856
+          },
+          "config": {
+            "name": "film_full_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "linear_trainable",
+            "m_source": "gold",
+            "fusion_type": "film_full",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001,
+            "logit_scale_learnable": true
+          }
+        }
+      ]
+    }
+  ]
+}

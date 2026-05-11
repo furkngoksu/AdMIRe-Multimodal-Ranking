@@ -1,0 +1,163 @@
+{
+  "aggregate": [
+    {
+      "best_dev": {
+        "loss": 1.6033280193805695,
+        "top1": 0.45,
+        "ndcg": 0.8176084816455841
+      },
+      "test": {
+        "loss": 1.6021557986736297,
+        "top1": 0.3625,
+        "ndcg": 0.7977653861045837
+      },
+      "xeval": {
+        "loss": 1.612359334230423,
+        "top1": 0.17416666716337204,
+        "ndcg": 0.7113043981790542
+      }
+    }
+  ],
+  "runs": [
+    {
+      "experiment": {
+        "name": "tuned_s42",
+        "m_embedding_dim": 64,
+        "seed": 42,
+        "query_projection": "pca_frozen",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 22,
+        "batch_size": 8,
+        "learning_rate": 0.0001967739057726345
+      },
+      "best_dev": {
+        "loss": 1.6030673384666443,
+        "top1": 0.46875,
+        "ndcg": 0.8211331963539124
+      },
+      "test": {
+        "loss": 1.602037638425827,
+        "top1": 0.375,
+        "ndcg": 0.79954694211483
+      },
+      "xeval": {
+        "loss": 1.6126152098178863,
+        "top1": 0.17291666716337203,
+        "ndcg": 0.7131814420223236
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s100",
+        "m_embedding_dim": 64,
+        "seed": 100,
+        "query_projection": "pca_frozen",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 22,
+        "batch_size": 8,
+        "learning_rate": 0.0001967739057726345
+      },
+      "best_dev": {
+        "loss": 1.6035214364528656,
+        "top1": 0.4375,
+        "ndcg": 0.8134339898824692
+      },
+      "test": {
+        "loss": 1.602345734834671,
+        "top1": 0.3125,
+        "ndcg": 0.7812821865081787
+      },
+      "xeval": {
+        "loss": 1.6123589754104615,
+        "top1": 0.16666666716337203,
+        "ndcg": 0.709903883934021
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s150",
+        "m_embedding_dim": 64,
+        "seed": 150,
+        "query_projection": "pca_frozen",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 22,
+        "batch_size": 8,
+        "learning_rate": 0.0001967739057726345
+      },
+      "best_dev": {
+        "loss": 1.603627622127533,
+        "top1": 0.4375,
+        "ndcg": 0.8172596246004105
+      },
+      "test": {
+        "loss": 1.6019442677497864,
+        "top1": 0.34375,
+        "ndcg": 0.7938284277915955
+      },
+      "xeval": {
+        "loss": 1.6121627569198609,
+        "top1": 0.17916666716337204,
+        "ndcg": 0.7115924954414368
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s200",
+        "m_embedding_dim": 64,
+        "seed": 200,
+        "query_projection": "pca_frozen",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 22,
+        "batch_size": 8,
+        "learning_rate": 0.0001967739057726345
+      },
+      "best_dev": {
+        "loss": 1.603176862001419,
+        "top1": 0.4375,
+        "ndcg": 0.8158743232488632
+      },
+      "test": {
+        "loss": 1.6025632917881012,
+        "top1": 0.40625,
+        "ndcg": 0.811137929558754
+      },
+      "xeval": {
+        "loss": 1.6124292612075806,
+        "top1": 0.17291666716337203,
+        "ndcg": 0.7107661247253418
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s250",
+        "m_embedding_dim": 64,
+        "seed": 250,
+        "query_projection": "pca_frozen",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 22,
+        "batch_size": 8,
+        "learning_rate": 0.0001967739057726345
+      },
+      "best_dev": {
+        "loss": 1.6032468378543854,
+        "top1": 0.46875,
+        "ndcg": 0.8203412741422653
+      },
+      "test": {
+        "loss": 1.6018880605697632,
+        "top1": 0.375,
+        "ndcg": 0.8030314445495605
+      },
+      "xeval": {
+        "loss": 1.6122304677963257,
+        "top1": 0.17916666716337204,
+        "ndcg": 0.7110780447721481
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "experiment": {
+    "name": "baseline_s200",
+    "m_embedding_dim": 64,
+    "seed": 200,
+    "query_projection": "pca_frozen",
+    "m_source": "predicted",
+    "fusion_type": "film_full",
+    "epochs": 20,
+    "batch_size": 8,
+    "learning_rate": 0.0001
+  },
+  "best_dev": {
+    "loss": 1.6033174693584442,
+    "top1": 0.46875,
+    "ndcg": 0.8199819773435593
+  },
+  "test": {
+    "loss": 1.6042063534259796,
+    "top1": 0.3125,
+    "ndcg": 0.7842064946889877
+  },
+  "xeval": {
+    "loss": 1.611233538389206,
+    "top1": 0.21041666716337204,
+    "ndcg": 0.7212527096271515
+  }
+}

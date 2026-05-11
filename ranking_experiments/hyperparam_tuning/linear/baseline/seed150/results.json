@@ -1,0 +1,33 @@
+{
+  "experiment": {
+    "name": "baseline_s150",
+    "m_embedding_dim": 64,
+    "seed": 150,
+    "query_projection": "linear_trainable",
+    "m_source": "predicted",
+    "fusion_type": "film_full",
+    "epochs": 20,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "logit_scale_learnable": true,
+    "model_name": "xlm-roberta-base",
+    "shared_dim": 512,
+    "max_length": 128,
+    "debug": false
+  },
+  "best_dev": {
+    "loss": 1.608083963394165,
+    "top1": 0.2800000011920929,
+    "ndcg": 0.7644549608230591
+  },
+  "test": {
+    "loss": 1.5762697458267212,
+    "top1": 0.2142857164144516,
+    "ndcg": 0.7717373967170715
+  },
+  "xeval": {
+    "loss": 1.6561216592788697,
+    "top1": 0.22175925970077515,
+    "ndcg": 0.7356452941894531
+  }
+}

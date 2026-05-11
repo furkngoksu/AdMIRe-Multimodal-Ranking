@@ -1,0 +1,188 @@
+{
+  "aggregate": [
+    {
+      "best_dev": {
+        "loss": 1.5965429902076722,
+        "top1": 0.37500000596046446,
+        "ndcg": 0.7877515256404877
+      },
+      "test": {
+        "loss": 1.513175642490387,
+        "top1": 0.49583333134651186,
+        "ndcg": 0.8517034590244293
+      },
+      "xeval": {
+        "loss": 1.8169448804855346,
+        "top1": 0.1203409093618393,
+        "ndcg": 0.6964241373538971
+      }
+    }
+  ],
+  "runs": [
+    {
+      "experiment": {
+        "name": "tuned_s42",
+        "m_embedding_dim": 64,
+        "seed": 42,
+        "query_projection": "linear_trainable",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 37,
+        "batch_size": 16,
+        "learning_rate": 0.00010647383786142787,
+        "logit_scale_learnable": true,
+        "model_name": "xlm-roberta-base",
+        "shared_dim": 512,
+        "max_length": 128,
+        "debug": false
+      },
+      "best_dev": {
+        "loss": 1.5797956585884094,
+        "top1": 0.4895833432674408,
+        "ndcg": 0.8177452981472015
+      },
+      "test": {
+        "loss": 1.508858323097229,
+        "top1": 0.5104166567325592,
+        "ndcg": 0.861325740814209
+      },
+      "xeval": {
+        "loss": 1.8208536028862,
+        "top1": 0.12443181872367859,
+        "ndcg": 0.6959989130496979
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s100",
+        "m_embedding_dim": 64,
+        "seed": 100,
+        "query_projection": "linear_trainable",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 37,
+        "batch_size": 16,
+        "learning_rate": 0.00010647383786142787,
+        "logit_scale_learnable": true,
+        "model_name": "xlm-roberta-base",
+        "shared_dim": 512,
+        "max_length": 128,
+        "debug": false
+      },
+      "best_dev": {
+        "loss": 1.5881232619285583,
+        "top1": 0.4340277910232544,
+        "ndcg": 0.8059083819389343
+      },
+      "test": {
+        "loss": 1.509960949420929,
+        "top1": 0.5,
+        "ndcg": 0.8455045223236084
+      },
+      "xeval": {
+        "loss": 1.8126252174377442,
+        "top1": 0.1340909093618393,
+        "ndcg": 0.6989707708358764
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s150",
+        "m_embedding_dim": 64,
+        "seed": 150,
+        "query_projection": "linear_trainable",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 37,
+        "batch_size": 16,
+        "learning_rate": 0.00010647383786142787,
+        "logit_scale_learnable": true,
+        "model_name": "xlm-roberta-base",
+        "shared_dim": 512,
+        "max_length": 128,
+        "debug": false
+      },
+      "best_dev": {
+        "loss": 1.6040858626365662,
+        "top1": 0.3541666716337204,
+        "ndcg": 0.7760428488254547
+      },
+      "test": {
+        "loss": 1.510382056236267,
+        "top1": 0.5208333432674408,
+        "ndcg": 0.8538659512996674
+      },
+      "xeval": {
+        "loss": 1.8361313939094543,
+        "top1": 0.1,
+        "ndcg": 0.6932485401630402
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s200",
+        "m_embedding_dim": 64,
+        "seed": 200,
+        "query_projection": "linear_trainable",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 37,
+        "batch_size": 16,
+        "learning_rate": 0.00010647383786142787,
+        "logit_scale_learnable": true,
+        "model_name": "xlm-roberta-base",
+        "shared_dim": 512,
+        "max_length": 128,
+        "debug": false
+      },
+      "best_dev": {
+        "loss": 1.6058412194252014,
+        "top1": 0.25,
+        "ndcg": 0.7662766873836517
+      },
+      "test": {
+        "loss": 1.5104550123214722,
+        "top1": 0.40625,
+        "ndcg": 0.8458065986633301
+      },
+      "xeval": {
+        "loss": 1.8338225841522218,
+        "top1": 0.1153409093618393,
+        "ndcg": 0.6931208372116089
+      }
+    },
+    {
+      "experiment": {
+        "name": "tuned_s250",
+        "m_embedding_dim": 64,
+        "seed": 250,
+        "query_projection": "linear_trainable",
+        "m_source": "predicted",
+        "fusion_type": "film_full",
+        "epochs": 37,
+        "batch_size": 16,
+        "learning_rate": 0.00010647383786142787,
+        "logit_scale_learnable": true,
+        "model_name": "xlm-roberta-base",
+        "shared_dim": 512,
+        "max_length": 128,
+        "debug": false
+      },
+      "best_dev": {
+        "loss": 1.6048689484596252,
+        "top1": 0.3472222238779068,
+        "ndcg": 0.772784411907196
+      },
+      "test": {
+        "loss": 1.5262218713760376,
+        "top1": 0.5416666567325592,
+        "ndcg": 0.8520144820213318
+      },
+      "xeval": {
+        "loss": 1.7812916040420532,
+        "top1": 0.12784090936183928,
+        "ndcg": 0.700781625509262
+      }
+    }
+  ]
+}

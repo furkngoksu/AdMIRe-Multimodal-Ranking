@@ -1,0 +1,256 @@
+{
+  "runs": [
+    {
+      "name": "concat_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.604524748665946,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.7932199920926776
+          },
+          "test": {
+            "loss": 1.6018171651022775,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.8073832648141044
+          },
+          "xeval": {
+            "loss": 1.6128326746133657,
+            "top1": 0.1623931626478831,
+            "ndcg": 0.706103612215091
+          },
+          "config": {
+            "name": "concat_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "concat",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.604524748665946,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.7932199920926776
+          },
+          "test": {
+            "loss": 1.6018171651022775,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.8073832648141044
+          },
+          "xeval": {
+            "loss": 1.6128326746133657,
+            "top1": 0.1623931626478831,
+            "ndcg": 0.706103612215091
+          },
+          "config": {
+            "name": "concat_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "concat",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ]
+    },
+    {
+      "name": "gated_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.6104851620537894,
+            "top1": 0.03571428571428571,
+            "ndcg": 0.691875730242048
+          },
+          "test": {
+            "loss": 1.6108035019465856,
+            "top1": 0.14285714285714285,
+            "ndcg": 0.7161319170679364
+          },
+          "xeval": {
+            "loss": 1.6090194873320751,
+            "top1": 0.2264957267504472,
+            "ndcg": 0.74750737960522
+          },
+          "config": {
+            "name": "gated_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "gated",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.6104851620537894,
+            "top1": 0.03571428571428571,
+            "ndcg": 0.691875730242048
+          },
+          "test": {
+            "loss": 1.6108035019465856,
+            "top1": 0.14285714285714285,
+            "ndcg": 0.7161319170679364
+          },
+          "xeval": {
+            "loss": 1.6090194873320751,
+            "top1": 0.2264957267504472,
+            "ndcg": 0.74750737960522
+          },
+          "config": {
+            "name": "gated_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "gated",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ]
+    },
+    {
+      "name": "film_scale_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.6105156285422189,
+            "top1": 0.03571428571428571,
+            "ndcg": 0.7001943673406329
+          },
+          "test": {
+            "loss": 1.6112706831523351,
+            "top1": 0.10714285714285714,
+            "ndcg": 0.7129623208727155
+          },
+          "xeval": {
+            "loss": 1.6090073340978377,
+            "top1": 0.2329059831607036,
+            "ndcg": 0.7470668814121149
+          },
+          "config": {
+            "name": "film_scale_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "film",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.6105156285422189,
+            "top1": 0.03571428571428571,
+            "ndcg": 0.7001943673406329
+          },
+          "test": {
+            "loss": 1.6112706831523351,
+            "top1": 0.10714285714285714,
+            "ndcg": 0.7129623208727155
+          },
+          "xeval": {
+            "loss": 1.6090073340978377,
+            "top1": 0.2329059831607036,
+            "ndcg": 0.7470668814121149
+          },
+          "config": {
+            "name": "film_scale_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "film",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ]
+    },
+    {
+      "name": "film_full_m64",
+      "runs": [
+        {
+          "best_dev": {
+            "loss": 1.6053653955459595,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.7944449952670506
+          },
+          "test": {
+            "loss": 1.6015672172818864,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.807239123753139
+          },
+          "xeval": {
+            "loss": 1.6117835900722406,
+            "top1": 0.18162393187865233,
+            "ndcg": 0.712140807738671
+          },
+          "config": {
+            "name": "film_full_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "film_full",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ],
+      "aggregate": [
+        {
+          "best_dev": {
+            "loss": 1.6053653955459595,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.7944449952670506
+          },
+          "test": {
+            "loss": 1.6015672172818864,
+            "top1": 0.39285714285714285,
+            "ndcg": 0.807239123753139
+          },
+          "xeval": {
+            "loss": 1.6117835900722406,
+            "top1": 0.18162393187865233,
+            "ndcg": 0.712140807738671
+          },
+          "config": {
+            "name": "film_full_m64",
+            "m_embedding_dim": 64,
+            "seed": 42,
+            "query_projection": "pca_frozen",
+            "m_source": "predicted",
+            "fusion_type": "film_full",
+            "epochs": 20,
+            "batch_size": 4,
+            "learning_rate": 0.0001
+          }
+        }
+      ]
+    }
+  ]
+}

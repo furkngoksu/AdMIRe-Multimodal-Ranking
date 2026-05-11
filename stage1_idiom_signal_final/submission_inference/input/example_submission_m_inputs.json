@@ -1,0 +1,13 @@
+[
+  {
+    "sample_id": "Turkish_0",
+    "language": "Turkish",
+    "row_index": 0,
+    "compound": "çürük elma",
+    "sentence": "Bir kuruluş içinden birkaç çürük elma çıktı diye, şaibeli sayılır mı; sayılmaz elbet.",
+    "paraphrase": "Bir kuruluşta birkaç kötü kişi ortaya çıktı diye tüm kurum şaibeli sayılmaz.",
+    "lex_sub": "Bir kuruluş içinden birkaç bozuk elma çıktı diye, şaibeli sayılır mı; sayılmaz elbet.",
+    "comp_drop": "Bir kuruluş içinden birkaç elma çıktı diye, şaibeli sayılır mı; sayılmaz elbet.",
+    "literalize": "Bir kuruluş içinde gerçekten bozulmuş birkaç elma bulundu diye, şaibeli sayılır mı; sayılmaz elbet."
+  }
+]

@@ -144,7 +144,7 @@ best_params.json
 
 # Model weights and data
 *.pt
-*.json
+json
 
 # Stage outputs
 stage1_idiom_signal/**/output/*
@@ -164,4 +164,3 @@ ranking_experiments/**/output/*
 readme.md
 checkpoints/*
 !checkpoints/.gitkeep
-*.tsv
