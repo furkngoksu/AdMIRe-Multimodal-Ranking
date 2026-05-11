@@ -10,6 +10,15 @@ import torch.nn.functional as F
 class CosineRanker(nn.Module):
     """Compute cosine scores between query and candidate representations."""
 
+    def __init__(self, logit_scale: float = 20.0, learnable: bool = False) -> None:
+        super().__init__()
+        if learnable:
+            # CLIP-style initialization: ln(1/0.07) ~ 2.659
+            # This makes exp(logit_scale) ~ 14.3 initially.
+            self.logit_scale = nn.Parameter(torch.ones([]) * 2.659)
+        else:
+            self.register_buffer("logit_scale", torch.tensor(logit_scale))
+
     def forward(
         self,
         query_repr: torch.Tensor,
@@ -35,10 +44,15 @@ class CosineRanker(nn.Module):
         query_repr = F.normalize(query_repr, p=2, dim=-1)
         candidate_repr = F.normalize(candidate_repr, p=2, dim=-1)
 
-        return torch.sum(
+        # [B, 1, D] * [B, K, D] -> [B, K, D] -> [B, K]
+        cosine_sim = torch.sum(
             query_repr.unsqueeze(1) * candidate_repr,
             dim=-1,
         )
+
+        if self.logit_scale.requires_grad:
+            return cosine_sim * self.logit_scale.exp()
+        return cosine_sim * self.logit_scale
 
 
 def scores_to_ranked_indices(scores: torch.Tensor) -> list[list[int]]:

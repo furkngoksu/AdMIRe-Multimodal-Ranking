@@ -25,6 +25,12 @@ from src.query_fusion import build_query_fusion
 from src.candidate_fusion import GatedCandidateFusion
 from src.ranker import CosineRanker
 
+# --- GLOBAL CONFIGURATION ---
+# Set to "linear_trainable" for the new sequential head or "pca_frozen" for the old baseline
+PROJECTION_TYPE = "linear_trainable"
+LEARNABLE_LOGIT_SCALE = True
+BASE_DIR = project_root / f"ranking_experiments/fusion_ablation/{PROJECTION_TYPE.split('_')[0]}"
+
 def load_cache():
     cache_path = project_root / "ranking_experiments/caching/cache/admire_rank_cache.pt"
     return torch.load(cache_path, map_location="cpu")
@@ -39,7 +45,8 @@ def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: to
     
     query_projection, _ = build_query_projection(config, train_q_raw, device)
     query_fusion = build_query_fusion(QueryFusionConfig(m_embedding_dim=config.m_embedding_dim, fusion_type=config.fusion_type)).to(device)
-    candidate_fusion, ranker = GatedCandidateFusion().to(device), CosineRanker().to(device)
+    candidate_fusion = GatedCandidateFusion().to(device)
+    ranker = CosineRanker(learnable=config.logit_scale_learnable).to(device)
     
     loaders = {
         "train": build_loader(cache["splits"]["train"], config.batch_size, True, config.seed),
@@ -49,7 +56,13 @@ def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: to
     }
     
     trained_modules = {"query_projection": query_projection, "query_fusion": query_fusion, "candidate_fusion": candidate_fusion, "ranker": ranker}
-    optimizer = torch.optim.AdamW(list(query_fusion.parameters()) + list(candidate_fusion.parameters()), lr=config.learning_rate)
+    
+    # Collect all trainable parameters from all modules
+    params = []
+    for mod in trained_modules.values():
+        params.extend([p for p in mod.parameters() if p.requires_grad])
+        
+    optimizer = torch.optim.AdamW(params, lr=config.learning_rate)
     
     best_ndcg = -1.0
     best_metrics = None
@@ -93,7 +106,7 @@ def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: to
 
 def main():
     device = get_device()
-    base_dir = project_root / "ranking_experiments/fusion_ablation"
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
     
     results = []
     configs = [
@@ -104,12 +117,20 @@ def main():
     ]
     
     for f_type, name in configs:
-        config = RankingExperimentConfig(name=name, m_embedding_dim=64, seed=42, fusion_type=f_type, m_source="gold")
-        output_path = base_dir / name / "output"
+        config = RankingExperimentConfig(
+            name=name, 
+            m_embedding_dim=64, 
+            seed=42, 
+            fusion_type=f_type, 
+            m_source="gold",
+            query_projection=PROJECTION_TYPE,
+            logit_scale_learnable=LEARNABLE_LOGIT_SCALE
+        )
+        output_path = BASE_DIR / name / "output"
         results.append(run_experiment(config, output_path, device))
             
     # Genel özet
-    save_json({"runs": results}, base_dir / "summary.json")
+    save_json({"runs": results}, BASE_DIR / "summary.json")
 
 if __name__ == "__main__":
     main()

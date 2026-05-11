@@ -31,8 +31,12 @@ from src.query_encoder import QueryEncoder  # noqa: E402
 from src.query_fusion import build_query_fusion  # noqa: E402
 from src.ranker import CosineRanker  # noqa: E402
 
+# --- GLOBAL CONFIGURATION ---
+# Set to "linear_trainable" for the new sequential head or "pca_frozen" for the old baseline
+PROJECTION_TYPE = "linear_trainable"
+
 # --- Constants ---
-SUMMARY_PATH = REPO_ROOT / "ranking_experiments/hyperparam_tuning/final_model/summary.json"
+SUMMARY_PATH = REPO_ROOT / f"ranking_experiments/hyperparam_tuning/{PROJECTION_TYPE.split('_')[0]}/final_model/summary.json"
 M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal_final/output/submission_m_scores.tsv"
 SUBMISSION_TSV_DIR = REPO_ROOT / "admire2_submission/admire2_sentences"
 SUBMISSION_DATA_DIR = REPO_ROOT / "admire2_submission/admire2_data"
@@ -116,57 +120,75 @@ def create_visual_sentence(sentence: str, spans: list[tuple[int, int]]) -> str:
 # --- Model loading ---
 def load_ranking_modules(
     device: torch.device,
-) -> tuple[dict[str, torch.nn.Module], CosineRanker]:
-    """Load the best ranking configuration, modules, and trained weights."""
+) -> tuple[dict[str, torch.nn.Module], dict[str, torch.nn.Module], CosineRanker]:
+    """Load the best ranking configuration and initialized modules with fancy logging."""
     with SUMMARY_PATH.open("r", encoding="utf-8") as file:
         summary = json.load(file)
 
     best_run = max(summary["runs"], key=lambda run: float(run["best_dev"]["ndcg"]))
-    weights_path = REPO_ROOT / "ranking_experiments/hyperparam_tuning/final_model" / f"seed{best_run['experiment']['seed']}" / "weights.pt"
-    experiment_config = RankingExperimentConfig(**best_run["experiment"])
+    subdir = PROJECTION_TYPE.split("_")[0]
+    weights_path = REPO_ROOT / f"ranking_experiments/hyperparam_tuning/{subdir}/final_model" / f"seed{best_run['experiment']['seed']}" / "weights.pt"
+    
+    # Robustly initialize config from dictionary
+    exp_dict = best_run["experiment"]
+    # Filter keys to match dataclass
+    valid_keys = RankingExperimentConfig.__dataclass_fields__.keys()
+    filtered_exp = {k: v for k, v in exp_dict.items() if k in valid_keys}
+    experiment_config = RankingExperimentConfig(**filtered_exp)
 
-    # Load weights first to get shapes, avoiding cache dependency
-    print(f"[info] Loading best model weights: {weights_path}")
+    print("\n" + "="*50)
+    print("  🏆 LOADING BEST RANKING MODEL")
+    print("="*50)
+    print(f"  • Projection:  {PROJECTION_TYPE}")
+    print(f"  • Fusion:      {experiment_config.fusion_type}")
+    print(f"  • LR:          {experiment_config.learning_rate:.2e}")
+    print(f"  • Learnable T: {experiment_config.logit_scale_learnable}")
+    print(f"  • Seed:        {experiment_config.seed}")
+    print(f"  • Weights:     .../{weights_path.relative_to(REPO_ROOT)}")
+    print("="*50 + "\n")
+
+    print(f"[info] Loading best model weights...")
     weights = torch.load(weights_path, map_location=device)
 
-    # Initialize modules using shapes from weights
-    from src.query_encoder import FrozenPCAProjection
+    # 1. Encoders
+    query_encoder = QueryEncoder(config=experiment_config).to(device)
+    query_encoder.projection.load_state_dict(weights["query_projection"])
     
-    # Extract shapes from query_projection state dict in the weights file
-    proj_sd = weights["query_projection"]
-    mean_shape = proj_sd["mean"].shape
-    comp_shape = proj_sd["components"].shape
-    
-    # Create projection matching exactly what is on disk
-    query_projection = FrozenPCAProjection(
-        mean=torch.zeros(mean_shape, device=device),
-        components=torch.zeros(comp_shape, device=device),
-        output_dim=512
-    )
+    image_encoder = ImageEncoder().to(device)
+    caption_encoder = CaptionEncoder().to(device)
 
+    # 2. Fusion & Ranking Modules
     query_fusion_config = QueryFusionConfig(
         m_embedding_dim=int(experiment_config.m_embedding_dim),
         fusion_type=experiment_config.fusion_type,
     )
     query_fusion = build_query_fusion(query_fusion_config).to(device)
+    query_fusion.load_state_dict(weights["query_fusion"])
+    
     candidate_fusion = GatedCandidateFusion().to(device)
-    ranker = CosineRanker().to(device)
+    # candidate_fusion has no weights in current architecture (parameter-less gating)
 
+    ranker = CosineRanker(
+        learnable=getattr(experiment_config, "logit_scale_learnable", False)
+    ).to(device)
+    ranker.load_state_dict(weights["ranker"])
+
+    # Prepare return dictionaries
+    encoders = {
+        "query": query_encoder,
+        "image": image_encoder,
+        "caption": caption_encoder,
+    }
     modules = {
-        "query_projection": query_projection,
         "query_fusion": query_fusion,
         "candidate_fusion": candidate_fusion,
     }
 
-    print(f"[info] Applying weights to modules...")
-    for name, module in modules.items():
-        module.load_state_dict(weights[name])
-
-    for module in modules.values():
-        module.eval()
+    for e in encoders.values(): e.eval()
+    for m in modules.values(): m.eval()
     ranker.eval()
 
-    return modules, ranker
+    return encoders, modules, ranker
 
 
 # --- Inference ---
@@ -186,12 +208,11 @@ def rank_batch(
         device=device,
     )
 
-    q_raw = encoders["query"].encode_raw(sentences, compounds)
+    q_fused_repr = encoders["query"](sentences, compounds)
     image_repr = encoders["image"]([sample["image_paths"] for sample in batch])
     caption_repr = encoders["caption"]([sample["captions"] for sample in batch])
 
-    q_projected = modules["query_projection"](q_raw)
-    q_fused = modules["query_fusion"](q_projected, m_probs)
+    q_fused = modules["query_fusion"](q_fused_repr, m_probs)
     candidate_repr = modules["candidate_fusion"](image_repr, caption_repr)
 
     scores = ranker(q_fused, candidate_repr)
@@ -200,9 +221,9 @@ def rank_batch(
     for index in range(len(batch)):
         tensor_stats.append(
             {
-                "q_raw_norm": round(float(torch.norm(q_raw[index]).item()), 4),
-                "q_projected_mean": round(float(q_projected[index].mean().item()), 6),
+                "q_proj_mean": round(float(q_fused_repr[index].mean().item()), 6),
                 "q_fused_mean": round(float(q_fused[index].mean().item()), 6),
+                "scores_max": round(float(scores[index].max().item()), 4),
             }
         )
 
@@ -352,14 +373,8 @@ def main() -> None:
     device = get_device()
     print(f"[system] Inference device: {device}")
 
-    modules, ranker = load_ranking_modules(device)
+    encoders, modules, ranker = load_ranking_modules(device)
     m_scores = read_m_scores(M_SCORES_PATH)
-
-    encoders = {
-        "query": QueryEncoder().to(device).eval(),
-        "image": ImageEncoder().to(device).eval(),
-        "caption": CaptionEncoder().to(device).eval(),
-    }
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     generated_files: list[Path] = []

@@ -27,6 +27,11 @@ class RankingExperimentConfig:
     epochs: int = 20
     batch_size: int = 4
     learning_rate: float = 1e-4
+    logit_scale_learnable: bool = False
+    model_name: str = "xlm-roberta-base"
+    shared_dim: int = 512
+    max_length: int = 128
+    debug: bool = False
 
     def to_dict(self) -> dict[str, int | float | str]:
         return asdict(self)

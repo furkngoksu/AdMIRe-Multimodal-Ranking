@@ -70,7 +70,12 @@ def fit_pca_projection(q_raw: torch.Tensor, output_dim: int, device: torch.devic
 
 def build_query_projection(experiment: RankingExperimentConfig, train_q_raw: torch.Tensor, device: torch.device) -> tuple[nn.Module, dict[str, Any]]:
     if experiment.query_projection == "linear_trainable":
-        projection = nn.Linear(train_q_raw.size(-1), SHARED_DIM).to(device)
+        projection = nn.Sequential(
+            nn.Linear(train_q_raw.size(-1), SHARED_DIM),
+            nn.LayerNorm(SHARED_DIM),
+            nn.GELU(),
+            nn.Dropout(0.1),
+        ).to(device)
         return projection, {"query_projection": "linear_trainable", "trainable": True, "raw_dim": train_q_raw.size(-1), "output_dim": SHARED_DIM}
     projection = fit_pca_projection(q_raw=train_q_raw, output_dim=SHARED_DIM, device=device)
     return projection, {"query_projection": "pca_frozen", "trainable": False, "raw_dim": train_q_raw.size(-1), "samples": train_q_raw.size(0), "components": projection.components.size(0), "output_dim": projection.output_dim}
@@ -94,12 +99,7 @@ def train_one_epoch(modules: dict[str, nn.Module], loader: DataLoader, optimizer
         gold_relevance = batch["gold_relevance"].to(device)
         optimizer.zero_grad(set_to_none=True)
         scores = forward_scores(batch, experiment.m_source, query_projection, query_fusion, candidate_fusion, ranker, device)
-        
-        # --- TEMPERATURE SCALING ---
-        # Scale scores to sharpen the softmax distribution for better gradient flow
-        scaled_scores = scores * 20.0
-        
-        loss = listwise_ranking_loss(scaled_scores, gold_relevance)
+        loss = listwise_ranking_loss(scores, gold_relevance)
         loss.backward(); optimizer.step()
         total_loss += loss.item() * gold_relevance.size(0); total_examples += gold_relevance.size(0)
         progress.set_postfix(loss=f"{loss.item():.4f}")

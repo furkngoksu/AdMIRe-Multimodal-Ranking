@@ -78,7 +78,12 @@ class QueryEncoder(nn.Module):
                 output_dim=config.shared_dim,
             )
         else:
-            self.projection = nn.Linear(hidden_dim * 2, config.shared_dim)
+            self.projection = nn.Sequential(
+                nn.Linear(hidden_dim * 2, config.shared_dim),
+                nn.LayerNorm(config.shared_dim),
+                nn.GELU(),
+                nn.Dropout(0.1),
+            )
 
     @classmethod
     def normalize_text(cls, text: str) -> str:

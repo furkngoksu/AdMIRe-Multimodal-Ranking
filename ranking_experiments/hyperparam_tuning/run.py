@@ -27,9 +27,13 @@ from src.candidate_fusion import GatedCandidateFusion
 from src.ranker import CosineRanker
 
 # --- GLOBAL CONFIGURATION ---
+# Set to "linear_trainable" for the new sequential head or "pca_frozen" for the old baseline
+PROJECTION_TYPE = "linear_trainable"
+LEARNABLE_LOGIT_SCALE = True
+
 SEEDS = (42, 100, 150, 200, 250)
 N_TRIALS = 30
-TUNING_DIR = Path("ranking_experiments/hyperparam_tuning")
+TUNING_DIR = project_root / f"ranking_experiments/hyperparam_tuning/{PROJECTION_TYPE.split('_')[0]}"
 FINAL_MODEL_DIR = TUNING_DIR / "final_model"
 BASELINE_DIR = TUNING_DIR / "baseline"
 
@@ -56,7 +60,8 @@ def run_training_flow(experiment: RankingExperimentConfig, output_dir: Path, loa
     # Initialize Multimodal Ranking components
     query_projection, _ = build_query_projection(experiment, train_q_raw, device)
     query_fusion = build_query_fusion(QueryFusionConfig(m_embedding_dim=experiment.m_embedding_dim, fusion_type=experiment.fusion_type)).to(device)
-    candidate_fusion, ranker = GatedCandidateFusion().to(device), CosineRanker().to(device)
+    candidate_fusion = GatedCandidateFusion().to(device)
+    ranker = CosineRanker(learnable=experiment.logit_scale_learnable).to(device)
     
     trained_modules = {
         "query_projection": query_projection, 
@@ -65,7 +70,12 @@ def run_training_flow(experiment: RankingExperimentConfig, output_dir: Path, loa
         "ranker": ranker
     }
     
-    optimizer = torch.optim.AdamW(list(query_fusion.parameters()) + list(candidate_fusion.parameters()), lr=experiment.learning_rate)
+    # Collect all trainable parameters from all modules
+    params = []
+    for mod in trained_modules.values():
+        params.extend([p for p in mod.parameters() if p.requires_grad])
+        
+    optimizer = torch.optim.AdamW(params, lr=experiment.learning_rate)
     
     best_ndcg = -1.0
     best_metrics = None
@@ -119,6 +129,8 @@ def objective(trial):
         epochs=trial.suggest_int("epochs", 15, 25),
         batch_size=trial.suggest_categorical("batch_size", [8, 16]),
         learning_rate=trial.suggest_float("learning_rate", 5e-5, 3e-4, log=True),
+        query_projection=PROJECTION_TYPE,
+        logit_scale_learnable=LEARNABLE_LOGIT_SCALE
     )
     
     loaders = build_loaders(cache, config.batch_size, config.seed)
@@ -142,7 +154,17 @@ def main():
     print(f"\n[PHASE 1] Training Baseline ({SELECTED_ARCHITECTURE} with Default Params)...")
     baseline_runs = []
     for seed in SEEDS:
-        exp = RankingExperimentConfig(name=f"baseline_s{seed}", m_embedding_dim=64, seed=seed, fusion_type=SELECTED_ARCHITECTURE, epochs=20, batch_size=8, learning_rate=1e-4)
+        exp = RankingExperimentConfig(
+            name=f"baseline_s{seed}", 
+            m_embedding_dim=64, 
+            seed=seed, 
+            fusion_type=SELECTED_ARCHITECTURE, 
+            epochs=20, 
+            batch_size=8, 
+            learning_rate=1e-4,
+            query_projection=PROJECTION_TYPE,
+            logit_scale_learnable=LEARNABLE_LOGIT_SCALE
+        )
         loaders = build_loaders(cache, 8, seed)
         res = run_training_flow(exp, BASELINE_DIR / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
         baseline_runs.append(res)
@@ -168,6 +190,8 @@ def main():
             epochs=best_params["epochs"],
             batch_size=best_params["batch_size"],
             learning_rate=best_params["learning_rate"],
+            query_projection=PROJECTION_TYPE,
+            logit_scale_learnable=LEARNABLE_LOGIT_SCALE
         )
         loaders = build_loaders(cache, best_params["batch_size"], seed)
         res = run_training_flow(exp, FINAL_MODEL_DIR / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
