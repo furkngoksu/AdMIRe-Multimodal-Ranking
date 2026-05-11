@@ -83,7 +83,8 @@ def forward_scores(batch: dict[str, torch.Tensor], m_source: str, query_projecti
     candidate_repr = candidate_fusion(batch["i"].to(device), batch["t"].to(device))
     return ranker(q_prime, candidate_repr)
 
-def train_one_epoch(loader: DataLoader, experiment: RankingExperimentConfig, query_projection: nn.Module, query_fusion: nn.Module, candidate_fusion: nn.Module, ranker: nn.Module, optimizer: torch.optim.Optimizer, device: torch.device, epoch: int) -> float:
+def train_one_epoch(modules: dict[str, nn.Module], loader: DataLoader, optimizer: torch.optim.Optimizer, device: torch.device, epoch: int, experiment: RankingExperimentConfig) -> float:
+    query_projection, query_fusion, candidate_fusion, ranker = modules["query_projection"], modules["query_fusion"], modules["candidate_fusion"], modules.get("ranker")
     if experiment.query_projection == "linear_trainable": query_projection.train()
     else: query_projection.eval()
     query_fusion.train(); candidate_fusion.train()
@@ -93,13 +94,19 @@ def train_one_epoch(loader: DataLoader, experiment: RankingExperimentConfig, que
         gold_relevance = batch["gold_relevance"].to(device)
         optimizer.zero_grad(set_to_none=True)
         scores = forward_scores(batch, experiment.m_source, query_projection, query_fusion, candidate_fusion, ranker, device)
-        loss = listwise_ranking_loss(scores, gold_relevance)
+        
+        # --- TEMPERATURE SCALING ---
+        # Scale scores to sharpen the softmax distribution for better gradient flow
+        scaled_scores = scores * 20.0
+        
+        loss = listwise_ranking_loss(scaled_scores, gold_relevance)
         loss.backward(); optimizer.step()
         total_loss += loss.item() * gold_relevance.size(0); total_examples += gold_relevance.size(0)
         progress.set_postfix(loss=f"{loss.item():.4f}")
     return total_loss / total_examples
 
-def evaluate(loader: DataLoader, split_name: str, m_source: str, query_projection: nn.Module, query_fusion: nn.Module, candidate_fusion: nn.Module, ranker: nn.Module, device: torch.device) -> dict[str, float]:
+def evaluate(modules: dict[str, nn.Module], loader: DataLoader, split_name: str, m_source: str, device: torch.device) -> dict[str, float]:
+    query_projection, query_fusion, candidate_fusion, ranker = modules["query_projection"], modules["query_fusion"], modules["candidate_fusion"], modules["ranker"]
     query_projection.eval(); query_fusion.eval(); candidate_fusion.eval(); ranker.eval()
     losses, top1_values, ndcg_values = [], [], []
     with torch.no_grad():

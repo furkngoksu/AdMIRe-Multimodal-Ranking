@@ -4,8 +4,9 @@ import sys
 from pathlib import Path
 import optuna
 import torch
+import torch.nn as nn
 
-# Add project root to Python path
+# Project path configuration
 project_root = Path(__file__).resolve().parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -18,7 +19,6 @@ from ranking_experiments.utils import (
     build_loader,
     build_query_projection,
     save_json,
-    load_weights,
     save_weights,
 )
 from src.config import QueryFusionConfig, get_device
@@ -26,9 +26,15 @@ from src.query_fusion import build_query_fusion
 from src.candidate_fusion import GatedCandidateFusion
 from src.ranker import CosineRanker
 
+# --- GLOBAL CONFIGURATION ---
 SEEDS = (42, 100, 150, 200, 250)
 N_TRIALS = 30
 TUNING_DIR = Path("ranking_experiments/hyperparam_tuning")
+FINAL_MODEL_DIR = TUNING_DIR / "final_model"
+BASELINE_DIR = TUNING_DIR / "baseline"
+
+# Based on Fusion Ablation results, our selected architecture:
+SELECTED_ARCHITECTURE = "film_full" 
 
 def load_cache():
     cache_path = project_root / "ranking_experiments/caching/cache/admire_rank_cache.pt"
@@ -44,53 +50,87 @@ def build_loaders(cache, batch_size, seed):
     }
 
 def run_training_flow(experiment: RankingExperimentConfig, output_dir: Path, loaders: dict, train_q_raw: torch.Tensor, device: torch.device, save_to_disk: bool = False):
+    """Core training logic for both Baseline and Tuned runs."""
     set_seed(experiment.seed)
+    
+    # Initialize Multimodal Ranking components
     query_projection, _ = build_query_projection(experiment, train_q_raw, device)
     query_fusion = build_query_fusion(QueryFusionConfig(m_embedding_dim=experiment.m_embedding_dim, fusion_type=experiment.fusion_type)).to(device)
     candidate_fusion, ranker = GatedCandidateFusion().to(device), CosineRanker().to(device)
     
-    trainable_params = list(query_fusion.parameters()) + list(candidate_fusion.parameters())
-    optimizer = torch.optim.AdamW(trainable_params, lr=experiment.learning_rate)
+    trained_modules = {
+        "query_projection": query_projection, 
+        "query_fusion": query_fusion, 
+        "candidate_fusion": candidate_fusion, 
+        "ranker": ranker
+    }
+    
+    optimizer = torch.optim.AdamW(list(query_fusion.parameters()) + list(candidate_fusion.parameters()), lr=experiment.learning_rate)
     
     best_ndcg = -1.0
-    best_metrics, best_state_dicts = None, None
-    trained_modules = {"query_projection": query_projection, "query_fusion": query_fusion, "candidate_fusion": candidate_fusion}
+    best_metrics = None
+    best_state_dicts = None
 
     for epoch in range(1, experiment.epochs + 1):
-        train_one_epoch(trained_modules, loaders["train"], optimizer, device)
-        dev_metrics = evaluate(trained_modules, ranker, loaders["dev"], device)
+        train_one_epoch(trained_modules, loaders["train"], optimizer, device, epoch, experiment)
+        dev_metrics = evaluate(trained_modules, loaders["dev"], "dev", experiment.m_source, device)
+        
         if dev_metrics["ndcg"] > best_ndcg:
             best_ndcg = dev_metrics["ndcg"]
             best_metrics = dev_metrics
             best_state_dicts = {name: mod.state_dict() for name, mod in trained_modules.items()}
 
+    # Load best weights for final evaluation
+    if best_state_dicts:
+        for name, mod in trained_modules.items(): 
+            mod.load_state_dict(best_state_dicts[name])
+            
+    test_metrics = evaluate(trained_modules, loaders["test"], "test", experiment.m_source, device)
+    xeval_metrics = evaluate(trained_modules, loaders["xeval"], "xeval", experiment.m_source, device)
+
     if save_to_disk and best_state_dicts:
+        output_dir.mkdir(parents=True, exist_ok=True)
         save_weights(trained_modules, output_dir / "weights.pt")
-        save_json({"experiment": experiment.to_dict(), "best_dev": best_metrics}, output_dir / "results.json")
+        save_json({
+            "experiment": experiment.to_dict(), 
+            "best_dev": best_metrics,
+            "test": test_metrics,
+            "xeval": xeval_metrics
+        }, output_dir / "results.json")
     
-    return {"experiment": experiment.to_dict(), "best_dev": best_metrics, "weights_path": str(output_dir / "weights.pt")}
+    return {
+        "experiment": experiment.to_dict(), 
+        "best_dev": best_metrics, 
+        "test": test_metrics, 
+        "xeval": xeval_metrics
+    }
 
 def objective(trial):
+    """Optuna objective function for hyperparameter optimization."""
     device = get_device()
     cache = load_cache()
     train_q_raw = cache["splits"]["train"]["q_raw"]
+    
     config = RankingExperimentConfig(
         name=f"trial_{trial.number}",
         m_embedding_dim=64,
         seed=42,
-        m_source="gold",
-        fusion_type=trial.suggest_categorical("fusion_type", ["concat", "gated", "film", "film_full"]),
-        epochs=trial.suggest_int("epochs", 10, 30),
-        batch_size=trial.suggest_categorical("batch_size", [4, 8, 16]),
-        learning_rate=trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True),
+        fusion_type=SELECTED_ARCHITECTURE,
+        epochs=trial.suggest_int("epochs", 15, 25),
+        batch_size=trial.suggest_categorical("batch_size", [8, 16]),
+        learning_rate=trial.suggest_float("learning_rate", 5e-5, 3e-4, log=True),
     )
+    
     loaders = build_loaders(cache, config.batch_size, config.seed)
     result = run_training_flow(config, TUNING_DIR / f"trial_{trial.number}", loaders, train_q_raw, device, save_to_disk=False)
     return result["best_dev"]["ndcg"]
 
-def aggregate_runs(results):
+def aggregate_results(results):
     from statistics import mean
-    return {"best_dev": {m: mean(float(run["best_dev"][m]) for run in results) for m in ("loss", "top1", "ndcg")}}
+    agg = {}
+    for split in ("best_dev", "test", "xeval"):
+        agg[split] = {m: mean(float(run[split][m]) for run in results) for m in ("loss", "top1", "ndcg")}
+    return agg
 
 def main():
     TUNING_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,30 +138,43 @@ def main():
     train_q_raw = cache["splits"]["train"]["q_raw"]
     device = get_device()
 
-    print("\n--- Phase 1: Hyperparameter Tuning (Gold M) ---")
+    # --- PHASE 1: BASELINE (Selected Architecture with Default Params) ---
+    print(f"\n[PHASE 1] Training Baseline ({SELECTED_ARCHITECTURE} with Default Params)...")
+    baseline_runs = []
+    for seed in SEEDS:
+        exp = RankingExperimentConfig(name=f"baseline_s{seed}", m_embedding_dim=64, seed=seed, fusion_type=SELECTED_ARCHITECTURE, epochs=20, batch_size=8, learning_rate=1e-4)
+        loaders = build_loaders(cache, 8, seed)
+        res = run_training_flow(exp, BASELINE_DIR / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
+        baseline_runs.append(res)
+    save_json({"aggregate": [aggregate_results(baseline_runs)], "runs": baseline_runs}, BASELINE_DIR / "summary.json")
+
+    # --- PHASE 2: OPTUNA TUNING (Selected Architecture) ---
+    print(f"\n[PHASE 2] Tuning Hyperparameters for {SELECTED_ARCHITECTURE}...")
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
     study.optimize(objective, n_trials=N_TRIALS)
+    
     best_params = study.best_params
-    save_json({"best_params": best_params, "score": study.best_value}, TUNING_DIR / "best_params.json")
+    save_json({"best_params": best_params, "best_value": study.best_value}, TUNING_DIR / "best_params.json")
 
-    print("\n--- Phase 2: Final Training with Best Parameters ---")
-    final_results = []
+    # --- PHASE 3: FINAL TRAINING (Best Hyperparams) ---
+    print(f"\n[PHASE 3] Final Training: Optimized {SELECTED_ARCHITECTURE}...")
+    final_runs = []
     for seed in SEEDS:
         exp = RankingExperimentConfig(
-            name=f"best_model_seed{seed}",
+            name=f"tuned_s{seed}",
             m_embedding_dim=64,
             seed=seed,
-            m_source="gold",
-            fusion_type=best_params["fusion_type"],
+            fusion_type=SELECTED_ARCHITECTURE,
             epochs=best_params["epochs"],
             batch_size=best_params["batch_size"],
             learning_rate=best_params["learning_rate"],
         )
         loaders = build_loaders(cache, best_params["batch_size"], seed)
-        res = run_training_flow(exp, TUNING_DIR / "final_model" / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
-        final_results.append(res)
-    
-    save_json({"aggregate": [aggregate_runs(final_results)], "runs": final_results}, TUNING_DIR / "final_model/summary.json")
+        res = run_training_flow(exp, FINAL_MODEL_DIR / f"seed{seed}", loaders, train_q_raw, device, save_to_disk=True)
+        final_runs.append(res)
+
+    save_json({"aggregate": [aggregate_results(final_runs)], "runs": final_runs}, FINAL_MODEL_DIR / "summary.json")
+    print(f"\n[DONE] Results and models saved to {TUNING_DIR}")
 
 if __name__ == "__main__":
     main()

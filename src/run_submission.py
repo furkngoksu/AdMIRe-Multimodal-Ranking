@@ -32,7 +32,7 @@ from src.query_fusion import build_query_fusion  # noqa: E402
 from src.ranker import CosineRanker  # noqa: E402
 
 # --- Constants ---
-SUMMARY_PATH = REPO_ROOT / "ranking_experiments/tuning_predicted/final_model/summary.json"
+SUMMARY_PATH = REPO_ROOT / "ranking_experiments/hyperparam_tuning/final_model/summary.json"
 M_SCORES_PATH = REPO_ROOT / "stage1_idiom_signal_final/output/submission_m_scores.tsv"
 SUBMISSION_TSV_DIR = REPO_ROOT / "admire2_submission/admire2_sentences"
 SUBMISSION_DATA_DIR = REPO_ROOT / "admire2_submission/admire2_data"
@@ -122,7 +122,7 @@ def load_ranking_modules(
         summary = json.load(file)
 
     best_run = max(summary["runs"], key=lambda run: float(run["best_dev"]["ndcg"]))
-    weights_path = REPO_ROOT / "ranking_experiments/tuning_predicted/final_model" / f"seed{best_run['experiment']['seed']}" / "weights.pt"
+    weights_path = REPO_ROOT / "ranking_experiments/hyperparam_tuning/final_model" / f"seed{best_run['experiment']['seed']}" / "weights.pt"
     experiment_config = RankingExperimentConfig(**best_run["experiment"])
 
     # Load weights first to get shapes, avoiding cache dependency

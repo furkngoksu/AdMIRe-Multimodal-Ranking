@@ -256,8 +256,7 @@ class QueryEncoder(nn.Module):
         return q_raw
 
     def forward(self, sentences: List[str], compounds: List[str]) -> torch.Tensor:
-        """Final query projection and normalization."""
+        """Final query projection."""
         q_raw = self.encode_raw(sentences=sentences, compounds=compounds)
         q = self.projection(q_raw)
-        q = F.normalize(q, p=2, dim=-1)
         return q
