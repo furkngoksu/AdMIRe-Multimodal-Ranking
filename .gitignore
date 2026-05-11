@@ -135,6 +135,7 @@ dmypy.json
 # Large data files
 admire2_training/
 admire2_submission/
+*.zip
 
 # Generated project outputs
 outputs/*
