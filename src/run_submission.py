@@ -179,7 +179,7 @@ def rank_batch(
     image_repr = encoders["image"]([sample["image_paths"] for sample in batch])
     caption_repr = encoders["caption"]([sample["captions"] for sample in batch])
 
-    q_projected = F.normalize(modules["query_projection"](q_raw), p=2, dim=-1)
+    q_projected = modules["query_projection"](q_raw)
     q_fused = modules["query_fusion"](q_projected, m_probs)
     candidate_repr = modules["candidate_fusion"](image_repr, caption_repr)
 

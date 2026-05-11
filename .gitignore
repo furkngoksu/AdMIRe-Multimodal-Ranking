@@ -163,3 +163,4 @@ ranking_experiments/**/output/*
 readme.md
 checkpoints/*
 !checkpoints/.gitkeep
+*.tsv

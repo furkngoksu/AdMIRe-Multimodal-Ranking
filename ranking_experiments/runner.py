@@ -206,7 +206,7 @@ def forward_scores(
     image_repr = batch["i"].to(device)
     caption_repr = batch["t"].to(device)
 
-    q = F.normalize(query_projection(q_raw), p=2, dim=-1)
+    q = query_projection(q_raw)
     q_prime = query_fusion(q, m_tensor)
     candidate_repr = candidate_fusion(image_repr, caption_repr)
 
