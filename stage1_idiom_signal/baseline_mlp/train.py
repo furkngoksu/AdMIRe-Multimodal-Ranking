@@ -94,19 +94,24 @@ def train_single_seed(dataset, seed, device, hidden_1, hidden_2, dropout_1, drop
     optimizer = torch.optim.AdamW(classifier.parameters(), lr=lr, weight_decay=weight_decay); criterion = nn.BCEWithLogitsLoss()
     best_f1, best_epoch, best_metrics, best_state = -1.0, 0, None, None
     patience, patience_counter = 5, 0
+    history = []
     
     for epoch in range(1, epochs + 1):
         classifier.train()
+        total_train_loss, total_train_samples = 0.0, 0
         for embs, lbls in train_loader:
-            embs, lbls = embs.to(device), lbls.to(device); optimizer.zero_grad(); loss = criterion(classifier(embs).squeeze(-1), lbls); loss.backward(); torch.nn.utils.clip_grad_norm_(classifier.parameters(), max_norm=1.0); optimizer.step()
+            embs, lbls = embs.to(device), lbls.to(device); optimizer.zero_grad(); logits = classifier(embs).squeeze(-1); loss = criterion(logits, lbls); loss.backward(); torch.nn.utils.clip_grad_norm_(classifier.parameters(), max_norm=1.0); optimizer.step()
+            total_train_loss += loss.item() * len(lbls); total_train_samples += len(lbls)
         classifier.eval(); all_logits, all_labels = [], []
+        total_val_loss, total_val_samples = 0.0, 0
         with torch.no_grad():
             for embs, lbls in val_loader:
-                embs, lbls = embs.to(device), lbls.to(device); all_logits.append(classifier(embs).squeeze(-1)); all_labels.append(lbls)
+                embs, lbls = embs.to(device), lbls.to(device); logits = classifier(embs).squeeze(-1); loss = criterion(logits, lbls); total_val_loss += loss.item() * len(lbls); total_val_samples += len(lbls); all_logits.append(logits); all_labels.append(lbls)
         from sklearn.metrics import accuracy_score, f1_score
-        probs = torch.sigmoid(torch.cat(all_logits)).cpu().numpy(); lbls = torch.cat(all_labels).cpu().numpy(); preds = (probs >= 0.5).astype(float); f1 = f1_score(lbls, preds, zero_division=0)
+        probs = torch.sigmoid(torch.cat(all_logits)).cpu().numpy(); lbls = torch.cat(all_labels).cpu().numpy(); preds = (probs >= 0.5).astype(float); f1 = f1_score(lbls, preds, zero_division=0); acc = accuracy_score(lbls, preds)
+        history.append({"epoch": epoch, "train_loss": total_train_loss / max(1, total_train_samples), "val_loss": total_val_loss / max(1, total_val_samples), "val_f1": float(f1), "val_acc": float(acc)})
         if f1 > best_f1:
-            best_f1, best_epoch = f1, epoch; best_metrics = {"f1": f1, "accuracy": accuracy_score(lbls, preds)}
+            best_f1, best_epoch = f1, epoch; best_metrics = {"f1": f1, "accuracy": acc}
             if save_path: best_state = {k: v.cpu().clone() for k, v in classifier.state_dict().items()}
             patience_counter = 0
         else:
@@ -117,7 +122,7 @@ def train_single_seed(dataset, seed, device, hidden_1, hidden_2, dropout_1, drop
     if save_path and best_state:
         torch.save({"classifier_state_dict": best_state, "input_dim": input_dim, "hyperparameters": {"hidden_1": hidden_1, "hidden_2": hidden_2, "dropout_1": dropout_1, "dropout_2": dropout_2}, "seed": seed, "best_epoch": best_epoch, "metrics": best_metrics}, save_path)
     del classifier, optimizer; cleanup_memory(device)
-    return {"seed": seed, "best_epoch": best_epoch, "best_val_f1": best_f1, "best_metrics": best_metrics}
+    return {"seed": seed, "best_epoch": best_epoch, "best_val_f1": best_f1, "best_metrics": best_metrics, "history": history}
 
 def objective(trial, dataset, device):
     params = {"hidden_1": trial.suggest_categorical("hidden_1", [256, 512, 1024]), "hidden_2": trial.suggest_categorical("hidden_2", [64, 128, 256]), "dropout_1": trial.suggest_float("dropout_1", 0.1, 0.5, step=0.1), "dropout_2": trial.suggest_float("dropout_2", 0.1, 0.5, step=0.1), "lr": trial.suggest_categorical("lr", [1e-4, 5e-4, 1e-3, 5e-3]), "weight_decay": trial.suggest_categorical("weight_decay", [1e-5, 1e-4, 1e-3, 1e-2]), "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64])}
@@ -135,7 +140,8 @@ def main():
     study = optuna.create_study(direction="maximize"); study.optimize(lambda t: objective(t, dataset, device), n_trials=N_TRIALS)
     best_params = study.best_trial.params; per_seed = [train_single_seed(dataset, s, device, epochs=FINAL_EPOCHS, **best_params) for s in FINAL_SEEDS]
     best_run = max(per_seed, key=lambda r: r["best_val_f1"])
-    train_single_seed(dataset, best_run["seed"], device, epochs=FINAL_EPOCHS, save_path=OUTPUT_DIR / "idiom_signal.pt", **best_params)
+    final_res = train_single_seed(dataset, best_run["seed"], device, epochs=FINAL_EPOCHS, save_path=OUTPUT_DIR / "idiom_signal.pt", **best_params)
+    save_json(OUTPUT_DIR / "history.json", final_res["history"])
     save_json(OUTPUT_DIR / "config.json", {"model_name": MODEL_NAME, "input_format": "Pure Raw Sentence (Baseline)", "hyperparameters": best_params, "final_seeds": list(FINAL_SEEDS), "optuna_epochs": OPTUNA_EPOCHS, "final_epochs": FINAL_EPOCHS})
     save_json(OUTPUT_DIR / "metrics.json", {"name": "baseline_mlp", "mean_val_f1": mean(r["best_val_f1"] for r in per_seed), "best_seed": best_run["seed"], "best_val_f1": best_run["best_val_f1"], "best_metrics": best_run["best_metrics"], "hyperparameters": best_params, "per_seed": per_seed})
     print(f"Done. Mean F1: {mean(r['best_val_f1'] for r in per_seed):.4f}")

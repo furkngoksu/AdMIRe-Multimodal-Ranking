@@ -27,6 +27,7 @@ class RankingExperimentConfig:
     epochs: int = 20
     batch_size: int = 4
     learning_rate: float = 1e-4
+    weight_decay: float = 0.01
     logit_scale_learnable: bool = False
     model_name: str = "xlm-roberta-base"
     shared_dim: int = 512
