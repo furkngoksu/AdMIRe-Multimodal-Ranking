@@ -147,10 +147,12 @@ best_params.json
 json
 
 # Stage outputs
-stage1_idiom_signal/**/output/*
-!stage1_idiom_signal/**/output/.gitkeep
-stage1_idiom_signal/**/cache/*
-!stage1_idiom_signal/**/cache/.gitkeep
+signal_models/**/outputs/*
+!signal_models/**/outputs/.gitkeep
+signal_models/**/outputs_xlm_base/*
+!signal_models/**/outputs_xlm_base/.gitkeep
+signal_models/**/cache/*
+!signal_models/**/cache/.gitkeep
 
 ranking_experiments/cache/*
 !ranking_experiments/cache/.gitkeep
@@ -164,3 +166,6 @@ ranking_experiments/**/output/*
 readme.md
 checkpoints/*
 !checkpoints/.gitkeep
+
+# Ignore final submission outputs
+final_submission/
