@@ -71,7 +71,7 @@ class Stage1SignalConfig:
         PROJECT_ROOT
         / "signal_models"
         / "target_perturbation_mlp"
-        / "outputs_xlm_base_1"
+        / "outputs_xlm_base"
         / "idiom_signal.pt"
     )
 
