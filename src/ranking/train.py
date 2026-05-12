@@ -266,11 +266,18 @@ def load_or_build_cache(device: torch.device) -> dict[str, Any]:
     return cache
 
 
-def listwise_loss(scores: torch.Tensor, relevance: torch.Tensor) -> torch.Tensor:
+def combined_loss(
+    scores: torch.Tensor,
+    relevance: torch.Tensor,
+    gold_order: torch.Tensor,
+) -> torch.Tensor:
     target_distribution = F.softmax(relevance.float(), dim=-1)
     log_probs = F.log_softmax(scores, dim=-1)
+    lw_loss = -(target_distribution * log_probs).sum(dim=-1).mean()
 
-    return -(target_distribution * log_probs).sum(dim=-1).mean()
+    ce_loss = F.cross_entropy(scores, gold_order[:, 0])
+
+    return 0.3 * lw_loss + 0.7 * ce_loss
 
 
 def top1(scores: torch.Tensor, gold_order: torch.Tensor) -> float:
@@ -369,10 +376,11 @@ def train_epoch(
         dynamic_ncols=True,
     ):
         relevance = batch["gold_relevance"].to(device)
+        gold_order = batch["gold_order"].to(device)
 
         optimizer.zero_grad(set_to_none=True)
         scores = forward_pass(batch, modules, device)
-        loss = listwise_loss(scores, relevance)
+        loss = combined_loss(scores, relevance, gold_order)
 
         loss.backward()
         optimizer.step()
@@ -402,7 +410,7 @@ def evaluate(
 
             scores = forward_pass(batch, modules, device)
 
-            losses.append(listwise_loss(scores, relevance).item())
+            losses.append(combined_loss(scores, relevance, gold_order).item())
             top1_scores.append(top1(scores, gold_order))
             ndcg_scores.append(ndcg(scores, relevance))
 
