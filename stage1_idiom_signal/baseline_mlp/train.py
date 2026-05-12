@@ -12,8 +12,9 @@ from transformers import AutoModel, AutoTokenizer
 # --- CONFIG ---
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MATCHED_PATH = REPO_ROOT / "stage1_idiom_signal/data/matched_records.json"
-OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 MODEL_NAME = "xlm-roberta-base"
+clean_model_name = MODEL_NAME.split("/")[-1].replace("-roberta-", "_").replace("-", "_")
+OUTPUT_DIR = Path(__file__).resolve().parent / f"outputs_{clean_model_name}"
 OPTUNA_SEEDS = (42, 100, 150)
 FINAL_SEEDS = (42, 100, 150, 200, 250)
 OPTUNA_EPOCHS = 30
@@ -53,6 +54,13 @@ def mean_pool(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torc
     return (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
 
 def encode_texts(texts: list[str], model_name: str, max_length: int, device: torch.device) -> torch.Tensor:
+    cache_dir = REPO_ROOT / "stage1_idiom_signal/cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"cache_{clean_model_name}_baseline.pt"
+    if cache_path.exists():
+        print(f"Loading cached embeddings from: {cache_path}")
+        return torch.load(cache_path)
+        
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     encoder = AutoModel.from_pretrained(model_name).to(device); encoder.eval(); chunks = []
     for start in range(0, len(texts), ENCODE_BATCH_SIZE):
@@ -67,7 +75,10 @@ def encode_texts(texts: list[str], model_name: str, max_length: int, device: tor
             pooled = mean_pool(hidden, encoded["attention_mask"].to(device))
         chunks.append(pooled.cpu())
     del encoder; cleanup_memory(device)
-    return torch.cat(chunks, dim=0)
+    res = torch.cat(chunks, dim=0)
+    print(f"Saving cached embeddings to: {cache_path}")
+    torch.save(res, cache_path)
+    return res
 
 class EmbeddingDataset(Dataset):
     def __init__(self, embeddings: torch.Tensor, labels: list[float]):
@@ -122,8 +133,8 @@ def main():
     best_params = study.best_trial.params; per_seed = [train_single_seed(dataset, s, device, epochs=FINAL_EPOCHS, **best_params) for s in FINAL_SEEDS]
     best_run = max(per_seed, key=lambda r: r["best_val_f1"])
     train_single_seed(dataset, best_run["seed"], device, epochs=FINAL_EPOCHS, save_path=OUTPUT_DIR / "idiom_signal.pt", **best_params)
-    save_json(OUTPUT_DIR / "config.json", {"model_name": MODEL_NAME, "input_format": "Pure Raw Sentence (Baseline)", "hyperparameters": best_params, "final_seeds": list(FINAL_SEEDS)})
-    save_json(OUTPUT_DIR / "metrics.json", {"name": "baseline_mlp", "mean_val_f1": mean(r["best_val_f1"] for r in per_seed), "best_seed": best_run["seed"], "best_val_f1": best_run["best_val_f1"], "best_metrics": best_run["best_metrics"], "per_seed": per_seed})
+    save_json(OUTPUT_DIR / "config.json", {"model_name": MODEL_NAME, "input_format": "Pure Raw Sentence (Baseline)", "hyperparameters": best_params, "final_seeds": list(FINAL_SEEDS), "optuna_epochs": OPTUNA_EPOCHS, "final_epochs": FINAL_EPOCHS})
+    save_json(OUTPUT_DIR / "metrics.json", {"name": "baseline_mlp", "mean_val_f1": mean(r["best_val_f1"] for r in per_seed), "best_seed": best_run["seed"], "best_val_f1": best_run["best_val_f1"], "best_metrics": best_run["best_metrics"], "hyperparameters": best_params, "per_seed": per_seed})
     print(f"Done. Mean F1: {mean(r['best_val_f1'] for r in per_seed):.4f}")
 
 if __name__ == "__main__": main()

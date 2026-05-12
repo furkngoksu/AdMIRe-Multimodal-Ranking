@@ -48,10 +48,11 @@ def main() -> None:
     print(f"{'model':<25} {'mean_f1':>10} {'best_seed':>10} {'best_f1':>10}")
     print("-" * 58)
     for model_name in models:
-        metrics_path = MODEL_ROOT / model_name / "outputs" / "metrics.json"
-        if not metrics_path.exists():
+        metric_files = sorted((MODEL_ROOT / model_name).glob("outputs_*/metrics.json"), key=lambda p: p.stat().st_mtime)
+        if not metric_files:
             print(f"{model_name:<25} {'—':>10} {'—':>10} {'—':>10}")
             continue
+        metrics_path = metric_files[-1]
         with metrics_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
         mean_f1 = data.get("mean_val_f1", 0)

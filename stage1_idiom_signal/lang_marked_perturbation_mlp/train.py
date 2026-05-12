@@ -17,8 +17,9 @@ if str(REPO_ROOT) not in sys.path:
 from stage1_idiom_signal.model_registry import mark_compound
 
 MATCHED_PATH = REPO_ROOT / "stage1_idiom_signal/data/matched_records.json"
-OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 MODEL_NAME = "xlm-roberta-base"
+clean_model_name = MODEL_NAME.split("/")[-1].replace("-roberta-", "_").replace("-", "_")
+OUTPUT_DIR = Path(__file__).resolve().parent / f"outputs_{clean_model_name}"
 OPTUNA_SEEDS = (42, 100, 150)
 FINAL_SEEDS = (42, 100, 150, 200, 250)
 OPTUNA_EPOCHS = 30
@@ -62,6 +63,13 @@ def split_train_val(labels: list[float], val_ratio: float, seed: int) -> tuple[l
     return train_indices, val_indices
 
 def encode_matched_records(records: list[dict[str, Any]], model_name: str, max_length: int, device: torch.device) -> torch.Tensor:
+    cache_dir = REPO_ROOT / "stage1_idiom_signal/cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"cache_{clean_model_name}_lang_marked_pert.pt"
+    if cache_path.exists():
+        print(f"Loading cached embeddings from: {cache_path}")
+        return torch.load(cache_path)
+        
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     encoder = AutoModel.from_pretrained(model_name).to(device)
     encoder.eval()
@@ -91,7 +99,10 @@ def encode_matched_records(records: list[dict[str, Any]], model_name: str, max_l
             pooled = mean_pool(hidden, encoded["attention_mask"].to(device))
         chunks.append(pooled.view(len(batch), num_keys, -1).cpu())
     del encoder; cleanup_memory(device)
-    return torch.cat(chunks, dim=0)
+    res = torch.cat(chunks, dim=0)
+    print(f"Saving cached embeddings to: {cache_path}")
+    torch.save(res, cache_path)
+    return res
 
 class FusionDataset(Dataset):
     def __init__(self, pooled: torch.Tensor, labels: list[float]):
@@ -169,8 +180,8 @@ def main():
     best_run = max(per_seed, key=lambda r: r["best_val_f1"])
     train_single_seed(dataset, best_run["seed"], device, epochs=FINAL_EPOCHS, save_path=OUTPUT_DIR / "idiom_signal.pt", **best_params)
     
-    save_json(OUTPUT_DIR / "config.json", {"model_name": MODEL_NAME, "input_format": "Lang+Marked Context + Perturbation Diffs", "hyperparameters": best_params, "final_seeds": list(FINAL_SEEDS)})
-    save_json(OUTPUT_DIR / "metrics.json", {"name": "lang_marked_perturbation_mlp", "mean_val_f1": mean(r["best_val_f1"] for r in per_seed), "best_seed": best_run["seed"], "best_val_f1": best_run["best_val_f1"], "best_metrics": best_run["best_metrics"], "per_seed": per_seed})
+    save_json(OUTPUT_DIR / "config.json", {"model_name": MODEL_NAME, "input_format": "Lang+Marked Context + Perturbation Diffs", "hyperparameters": best_params, "final_seeds": list(FINAL_SEEDS), "optuna_epochs": OPTUNA_EPOCHS, "final_epochs": FINAL_EPOCHS})
+    save_json(OUTPUT_DIR / "metrics.json", {"name": "lang_marked_perturbation_mlp", "mean_val_f1": mean(r["best_val_f1"] for r in per_seed), "best_seed": best_run["seed"], "best_val_f1": best_run["best_val_f1"], "best_metrics": best_run["best_metrics"], "hyperparameters": best_params, "per_seed": per_seed})
     
     print(f"Done. Mean F1: {mean(r['best_val_f1'] for r in per_seed):.4f}")
 
