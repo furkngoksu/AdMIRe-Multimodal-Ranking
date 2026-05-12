@@ -26,17 +26,27 @@ from src.candidate_fusion import GatedCandidateFusion
 from src.ranker import CosineRanker
 
 # --- GLOBAL CONFIGURATION ---
-# Set to "linear_trainable" for the new sequential head or "pca_frozen" for the old baseline
+# Trainable Linear Projection Head is hard-coded to theoretically resolve the Modality Gap
 PROJECTION_TYPE = "linear_trainable"
 LEARNABLE_LOGIT_SCALE = True
-BASE_DIR = project_root / f"ranking_experiments/fusion_ablation/{PROJECTION_TYPE.split('_')[0]}"
+BASE_DIR = project_root / "ranking_experiments/fusion_ablation"
+
+SEEDS = (7, 13, 21, 42, 100)
+ARCHITECTURES = (
+    ("concat", "Concat"),
+    ("gated", "Gated"),
+    ("film", "FiLM (Scale)"),
+    ("film_full", "FiLM (Full)"),
+)
+
 
 def load_cache():
     cache_path = project_root / "ranking_experiments/caching/cache/admire_rank_cache.pt"
     return torch.load(cache_path, map_location="cpu")
 
-def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: torch.device):
-    print(f"\n[experiment] Starting: {config.name}")
+
+def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: torch.device) -> dict:
+    print(f"\n[experiment] Starting: {config.name} (seed={config.seed}, fusion={config.fusion_type})")
     set_seed(config.seed)
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -55,7 +65,12 @@ def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: to
         "xeval": build_loader(cache["splits"]["xeval"], config.batch_size, False, config.seed),
     }
     
-    trained_modules = {"query_projection": query_projection, "query_fusion": query_fusion, "candidate_fusion": candidate_fusion, "ranker": ranker}
+    trained_modules = {
+        "query_projection": query_projection,
+        "query_fusion": query_fusion,
+        "candidate_fusion": candidate_fusion,
+        "ranker": ranker,
+    }
     
     # Collect all trainable parameters from all modules
     params = []
@@ -67,70 +82,115 @@ def run_experiment(config: RankingExperimentConfig, output_dir: Path, device: to
     best_ndcg = -1.0
     best_metrics = None
     best_state_dicts = None
+    best_epoch = 1
+    history = []
+    
+    # --- PRODUCTION-GRADE ENHANCEMENT: EARLY STOPPING CONFIGURATION ---
+    patience = 5
+    patience_counter = 0
     
     for epoch in range(1, config.epochs + 1):
         train_one_epoch(trained_modules, loaders["train"], optimizer, device, epoch, config)
         dev_metrics = evaluate(trained_modules, loaders["dev"], "dev", config.m_source, device)
+        history.append({"epoch": epoch, "dev": dev_metrics})
+        
         if dev_metrics["ndcg"] > best_ndcg:
             best_ndcg = dev_metrics["ndcg"]
             best_metrics = dev_metrics
+            best_epoch = epoch
             best_state_dicts = {name: mod.state_dict() for name, mod in trained_modules.items()}
+            patience_counter = 0 # Generalization improved, reset counter
+        else:
+            patience_counter += 1 # No improvement, advance counter
+            if patience_counter >= patience:
+                print(f"      [Early Stopping] No improvement for {patience} epochs. Stopping at epoch {epoch}.")
+                break # Exit training loop for current seed run
 
-    # Final evaluation on best model
+    # Reload optimal weights for final split alignment testing
     if best_state_dicts:
-        for name, mod in trained_modules.items(): mod.load_state_dict(best_state_dicts[name])
+        for name, mod in trained_modules.items():
+            mod.load_state_dict(best_state_dicts[name])
             
     test_metrics = evaluate(trained_modules, loaders["test"], "test", config.m_source, device)
     xeval_metrics = evaluate(trained_modules, loaders["xeval"], "xeval", config.m_source, device)
     
-    # Save model and results for this specific config
     save_weights(trained_modules, output_dir / "weights.pt")
+    save_json(config.to_dict(), output_dir / "config.json")
     
-    # Notebook'un hem 'aggregate' hem de 'runs' bekleyen hücrelerini doyurma
     single_run = {
+        "experiment": config.to_dict(),
+        "history": history,
         "best_dev": best_metrics, 
         "test": test_metrics, 
         "xeval": xeval_metrics,
-        "config": config.to_dict()
+        "best_epoch": best_epoch,
+    }
+    save_json(single_run, output_dir / "results.json")
+    
+    return single_run
+
+
+def compute_aggregate(runs_cohort: list[dict], group_label: str) -> dict:
+    num_seeds = len(runs_cohort)
+    avg_best_epoch = sum(r["best_epoch"] for r in runs_cohort) / num_seeds
+    
+    agg = {
+        "group_label": group_label,
+        "num_seeds": num_seeds,
+        "best_epoch": avg_best_epoch,
+        "best_dev": {"loss": 0.0, "top1": 0.0, "ndcg": 0.0},
+        "test": {"loss": 0.0, "top1": 0.0, "ndcg": 0.0},
+        "xeval": {"loss": 0.0, "top1": 0.0, "ndcg": 0.0},
     }
     
-    res_payload = {
-        "name": config.name, 
-        "runs": [single_run],
-        "aggregate": [single_run]
-    }
-    
-    save_json(res_payload, output_dir / "summary.json")
-    
-    return res_payload
+    for split_name in ("best_dev", "test", "xeval"):
+        for metric_name in ("loss", "top1", "ndcg"):
+            total = sum(r[split_name][metric_name] for r in runs_cohort)
+            agg[split_name][metric_name] = total / num_seeds
+            
+    return agg
+
 
 def main():
     device = get_device()
-    BASE_DIR.mkdir(parents=True, exist_ok=True)
+    output_base = BASE_DIR / "output"
+    output_base.mkdir(parents=True, exist_ok=True)
     
-    results = []
-    configs = [
-        ("concat", "concat_m64"),
-        ("gated", "gated_m64"),
-        ("film", "film_scale_m64"),
-        ("film_full", "film_full_m64")
-    ]
+    all_runs = []
+    all_aggregates = []
     
-    for f_type, name in configs:
-        config = RankingExperimentConfig(
-            name=name, 
-            m_embedding_dim=64, 
-            seed=42, 
-            fusion_type=f_type, 
-            m_source="gold",
-            query_projection=PROJECTION_TYPE,
-            logit_scale_learnable=LEARNABLE_LOGIT_SCALE
-        )
-        output_path = BASE_DIR / name / "output"
-        results.append(run_experiment(config, output_path, device))
+    for f_type, label in ARCHITECTURES:
+        arch_runs = []
+        
+        for seed in SEEDS:
+            config = RankingExperimentConfig(
+                name=f"{f_type}_seed{seed}",
+                m_embedding_dim=64, # Static capacity constraint for structural comparison
+                seed=seed,
+                query_projection=PROJECTION_TYPE,
+                m_source="gold",
+                fusion_type=f_type,
+                epochs=20,
+                batch_size=4,
+                learning_rate=1e-4,
+                logit_scale_learnable=LEARNABLE_LOGIT_SCALE,
+            )
             
-    # Genel özet
-    save_json({"runs": results}, BASE_DIR / "summary.json")
+            run_output_dir = output_base / f_type / f"seed{seed}"
+            single_run = run_experiment(config, run_output_dir, device)
+            arch_runs.append(single_run)
+            all_runs.append(single_run)
+            
+        agg = compute_aggregate(arch_runs, label)
+        all_aggregates.append(agg)
+        
+    summary_payload = {
+        "runs": all_runs,
+        "aggregate": all_aggregates,
+    }
+    save_json(summary_payload, output_base / "summary.json")
+    print(f"\n[success] Flat Fusion Architecture Ablation completed. Results written to {output_base / 'summary.json'}")
+
 
 if __name__ == "__main__":
     main()

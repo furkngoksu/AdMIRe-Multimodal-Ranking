@@ -1,0 +1,66 @@
+{
+  "name": "lang_marked_perturbation_mlp",
+  "mean_val_f1": 0.7433973967355973,
+  "best_seed": 100,
+  "best_val_f1": 0.7951541850220264,
+  "best_metrics": {
+    "f1": 0.7951541850220264,
+    "accuracy": 0.7739975698663426
+  },
+  "hyperparameters": {
+    "hidden_1": 1024,
+    "hidden_2": 128,
+    "dropout_1": 0.35116892341109046,
+    "dropout_2": 0.3663671600615334,
+    "lr": 0.0001,
+    "weight_decay": 1e-05,
+    "batch_size": 32
+  },
+  "per_seed": [
+    {
+      "seed": 42,
+      "best_epoch": 5,
+      "best_val_f1": 0.7367119901112484,
+      "best_metrics": {
+        "f1": 0.7367119901112484,
+        "accuracy": 0.7446043165467626
+      }
+    },
+    {
+      "seed": 100,
+      "best_epoch": 6,
+      "best_val_f1": 0.7951541850220264,
+      "best_metrics": {
+        "f1": 0.7951541850220264,
+        "accuracy": 0.7739975698663426
+      }
+    },
+    {
+      "seed": 150,
+      "best_epoch": 5,
+      "best_val_f1": 0.7241379310344828,
+      "best_metrics": {
+        "f1": 0.7241379310344828,
+        "accuracy": 0.6435643564356436
+      }
+    },
+    {
+      "seed": 200,
+      "best_epoch": 4,
+      "best_val_f1": 0.7446504992867332,
+      "best_metrics": {
+        "f1": 0.7446504992867332,
+        "accuracy": 0.7551299589603283
+      }
+    },
+    {
+      "seed": 250,
+      "best_epoch": 3,
+      "best_val_f1": 0.7163323782234957,
+      "best_metrics": {
+        "f1": 0.7163323782234957,
+        "accuracy": 0.7327935222672065
+      }
+    }
+  ]
+}

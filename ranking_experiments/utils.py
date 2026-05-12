@@ -9,14 +9,74 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from ranking_experiments.losses import listwise_ranking_loss
-from ranking_experiments.metrics import ndcg_at_k, top1_accuracy
-from src.utils import RankingExperimentConfig, load_cache, save_json, build_query_projection, load_weights, save_weights
+from src.utils import RankingExperimentConfig, load_cache, load_weights, save_weights
 
 SHARED_DIM = 512
+
+
+def listwise_ranking_loss(
+    scores: torch.Tensor,
+    gold_relevance: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Listwise ranking loss for one query and five candidates.
+
+    Args:
+        scores: [B, K] model scores.
+        gold_relevance: [B, K] per-candidate relevance values.
+
+    Returns:
+        Scalar loss.
+    """
+    if scores.shape != gold_relevance.shape:
+        raise ValueError("scores and gold_relevance must have the same shape.")
+
+    target_distribution = F.softmax(gold_relevance.float(), dim=-1)
+    log_scores = F.log_softmax(scores, dim=-1)
+
+    return -(target_distribution * log_scores).sum(dim=-1).mean()
+
+
+def top1_accuracy(
+    scores: torch.Tensor,
+    gold_order_indices: torch.Tensor,
+) -> float:
+    """Top-1 image accuracy for ranked candidate scores."""
+    predicted_top = scores.argmax(dim=-1)
+    gold_top = gold_order_indices[:, 0]
+
+    return (predicted_top == gold_top).float().mean().item()
+
+
+def ndcg_at_k(
+    scores: torch.Tensor,
+    gold_relevance: torch.Tensor,
+    k: int = 5,
+) -> float:
+    """Mean nDCG@k for candidate ranking scores."""
+    if scores.shape != gold_relevance.shape:
+        raise ValueError("scores and gold_relevance must have the same shape.")
+
+    k = min(k, scores.size(1))
+
+    ranked_indices = scores.argsort(dim=-1, descending=True)[:, :k]
+    ranked_relevance = gold_relevance.gather(1, ranked_indices)
+
+    ideal_relevance = gold_relevance.sort(dim=-1, descending=True).values[:, :k]
+
+    discounts = torch.log2(
+        torch.arange(k, device=scores.device, dtype=torch.float) + 2.0
+    )
+
+    dcg = ((2.0**ranked_relevance - 1.0) / discounts).sum(dim=-1)
+    ideal_dcg = ((2.0**ideal_relevance - 1.0) / discounts).sum(dim=-1)
+
+    return (dcg / ideal_dcg.clamp(min=1e-9)).mean().item()
+
 
 class CachedRankingDataset(Dataset):
     def __init__(self, split_payload: dict[str, Any]) -> None:
@@ -37,20 +97,6 @@ class CachedRankingDataset(Dataset):
             "gold_order": self.payload["gold_order"][index],
         }
 
-class FrozenPCAProjection(nn.Module):
-    def __init__(self, mean: torch.Tensor, components: torch.Tensor, output_dim: int) -> None:
-        super().__init__()
-        self.output_dim = output_dim
-        self.register_buffer("mean", mean)
-        self.register_buffer("components", components)
-
-    def forward(self, q_raw: torch.Tensor) -> torch.Tensor:
-        projected = (q_raw - self.mean) @ self.components.t()
-        if projected.size(-1) < self.output_dim:
-            padding = projected.new_zeros(projected.size(0), self.output_dim - projected.size(-1))
-            projected = torch.cat([projected, padding], dim=-1)
-        return projected[:, : self.output_dim]
-
 def set_seed(seed: int) -> None:
     random.seed(seed)
     torch.manual_seed(seed)
@@ -60,25 +106,15 @@ def build_loader(split_payload: dict[str, Any], batch_size: int, shuffle: bool, 
     generator.manual_seed(seed)
     return DataLoader(CachedRankingDataset(split_payload), batch_size=batch_size, shuffle=shuffle, generator=generator)
 
-def fit_pca_projection(q_raw: torch.Tensor, output_dim: int, device: torch.device) -> FrozenPCAProjection:
-    mean = q_raw.mean(dim=0, keepdim=True)
-    centered = q_raw - mean
-    max_components = max(1, min(output_dim, centered.size(0) - 1, centered.size(1)))
-    _, _, vh = torch.linalg.svd(centered.float(), full_matrices=False)
-    components = vh[:max_components]
-    return FrozenPCAProjection(mean=mean.to(device), components=components.to(device), output_dim=output_dim)
-
 def build_query_projection(experiment: RankingExperimentConfig, train_q_raw: torch.Tensor, device: torch.device) -> tuple[nn.Module, dict[str, Any]]:
-    if experiment.query_projection == "linear_trainable":
-        projection = nn.Sequential(
-            nn.Linear(train_q_raw.size(-1), SHARED_DIM),
-            nn.LayerNorm(SHARED_DIM),
-            nn.GELU(),
-            nn.Dropout(0.1),
-        ).to(device)
-        return projection, {"query_projection": "linear_trainable", "trainable": True, "raw_dim": train_q_raw.size(-1), "output_dim": SHARED_DIM}
-    projection = fit_pca_projection(q_raw=train_q_raw, output_dim=SHARED_DIM, device=device)
-    return projection, {"query_projection": "pca_frozen", "trainable": False, "raw_dim": train_q_raw.size(-1), "samples": train_q_raw.size(0), "components": projection.components.size(0), "output_dim": projection.output_dim}
+    # Only linear_trainable is supported after removing legacy PCA
+    projection = nn.Sequential(
+        nn.Linear(train_q_raw.size(-1), SHARED_DIM),
+        nn.LayerNorm(SHARED_DIM),
+        nn.GELU(),
+        nn.Dropout(0.1),
+    ).to(device)
+    return projection, {"query_projection": "linear_trainable", "trainable": True, "raw_dim": train_q_raw.size(-1), "output_dim": SHARED_DIM}
 
 def forward_scores(batch: dict[str, torch.Tensor], m_source: str, query_projection: nn.Module, query_fusion: nn.Module, candidate_fusion: nn.Module, ranker: nn.Module, device: torch.device) -> torch.Tensor:
     q_raw = batch["q_raw"].to(device)

@@ -76,6 +76,39 @@ def mark_compound(sentence: str, compound: str) -> str:
         
     return marked_sentence
 
+import random
+
+def split_train_val_by_mwe(mwes: list[str], labels: list[float], val_ratio: float, seed: int) -> tuple[list[int], list[int]]:
+    """Splits data by unique idioms (MWEs) to prevent contamination, ensuring deterministic identical splits."""
+    data = list(zip(mwes, labels))
+    mwe_to_label = {}
+    for mwe, lbl in data:
+        mwe_to_label[mwe] = lbl # Record main label to stratify split
+        
+    label_to_mwes = {0.0: [], 1.0: []}
+    for mwe, lbl in mwe_to_label.items():
+        if lbl in label_to_mwes:
+            label_to_mwes[lbl].append(mwe)
+
+    rng = random.Random(seed)
+    val_mwes = set()
+    
+    for lbl, group in label_to_mwes.items():
+        # Ensure sorting before shuffling for reproducible cross-platform determinism
+        sorted_group = sorted(group)
+        rng.shuffle(sorted_group)
+        val_count = max(1, round(len(sorted_group) * val_ratio))
+        val_mwes.update(sorted_group[:val_count])
+        
+    train_indices, val_indices = [], []
+    for idx, (mwe, _) in enumerate(data):
+        if mwe in val_mwes:
+            val_indices.append(idx)
+        else:
+            train_indices.append(idx)
+            
+    return train_indices, val_indices
+
 # --- MODEL ENGINES ---
 
 class BaseMModelEngine:

@@ -1,59 +1,37 @@
 # Stage 1 — Idiom Signal Models (M)
 
-This module implements six distinct binary classification models to detect idiomaticity in multilingual contexts. These models generate the "Idiom Signal" ($M$) for the downstream multimodal ranking pipeline.
+This module implements six distinct binary classification models to detect idiomaticity in multilingual contexts. These models generate the continuous scalar Idiom Signal ($M$) mapped to downstream multimodal ranking architectures.
 
-## Model Philosophy
+## Model Philosophy & Feature Strategies
 
-We distinguish between **literal** and **idiomatic** uses using four core feature strategies:
-1. **Contextual Awareness**: Surrounding sentence semantics.
-2. **Language Signaling (`lang`)**: Explicit `[LANG=...]` prefix for the encoder.
-3. **Structural Marking (`marked`)**: Highlighting the compound via `<mwe>` tags.
-4. **Target Extraction (`target`)**: Precise coordinate extraction (Span Pooling) to get the exact target vector without text alteration.
-5. **Semantic Break (`perturbation`)**: Measuring semantic gap ($V_{diffs}$) using LLM-generated literal paraphrases.
+To effectively separate literal from idiomatic multi-word expression (MWE) usages, the feature extraction framework implements five distinct representation strategies:
 
-## Model Variants
+1. **Contextual Awareness**: Extracting global semantic context from surrounding sentence sequences.
+2. **Language Signaling (`lang`)**: Explicitly prefixing inputs with language indicators (e.g., `[LANG=tr]`) to condition cross-lingual representations.
+3. **Structural Marking (`marked`)**: Enclosing candidate compounds within explicit structural boundaries (`<mwe>` and `</mwe>`).
+4. **Target Extraction (`target`)**: Deriving targeted representation spans dynamically via token coordinate mapping (Span Pooling) without injecting structural boundary tokens.
+5. **Semantic Break (`perturbation`)**: Computing explicit representation gaps ($V_{diffs}$) between the input sequence and LLM-generated literal alternatives.
 
-| Model | Features | Reading Mechanism | Rationale |
+## Model Architectures
+
+The module compares six structural variants implementing subsets of the representation strategies:
+
+| Model | Input Features | Pooling Mechanism | Rationale |
 |---|---|---|---|
-| **`baseline_mlp`** | Raw Context | Mean Pool | Pure contextual cues; no target information. |
-| **`lang_marked_simple`** | Lang + Marked | Mean Pool | Simple head with explicit tags to avoid overfitting. |
-| **`lang_marked_mlp`** | Lang + Marked | Mean Pool | Deeper head for non-linear tag-context mapping. |
-| **`lang_marked_perturbation_mlp`** | Lang + Marked + Diffs | Mean Pool | **Legacy Flagship.** Context + semantic gap with tags. |
-| **`perturbation_mlp`** | Semantic Diffs | Mean Pool | Only looks at the "semantic gap" ($V_{diffs}$). |
-| **`target_perturbation_mlp`** | Target + Diffs | **Target Pool** + Mean Pool | **New Flagship.** Precise target vector + semantic gap. |
+| **`baseline_mlp`** | Raw Context | Mean Pooling | Captures standard contextual embeddings without explicit target boundary localization. |
+| **`lang_marked_simple`** | Lang + Marked | Mean Pooling | Combines explicit structural tags with a linear projection head. |
+| **`lang_marked_mlp`** | Lang + Marked | Mean Pooling | Integrates structural tags using a deeper multi-layer perceptron (MLP) mapping. |
+| **`lang_marked_perturbation_mlp`** | Lang + Marked + Diffs | Mean Pooling | Fuses explicit structural tags with semantic perturbation distance vectors. |
+| **`perturbation_mlp`** | Semantic Diffs | Mean Pooling | Evaluates idiomaticity directly through the vector distance of semantic alternatives. |
+| **`target_perturbation_mlp`** | Target + Diffs | Span Pooling + Mean Pooling | Combines uncorrupted target token representations with multi-aspect semantic gap vectors. |
 
-## Feature Engineering
+## Feature Engineering & Vector Representation
 
-Definitions in `model_registry.py`:
+Feature integration relies on constructing unified candidate vectors ($V$) prior to final classification layers:
 
-- **Tagged Input**: `[LANG=tr] <mwe>çürük elma</mwe> [MWE] çürük elma`
-- **Target Pooling**: Dynamic coordinate extraction (Span Pooling) over raw tokens.
-- **Perturbation Diffs**: $V_{diff} = |V_{target} - V_{literal\_rewrite}|$
-- **Target Perturbation Vector**: $[V_{target\_span} ; V_{diff\_lexsub} ; V_{diff\_compdrop} ; V_{diff\_paraphrase} ; V_{diff\_literal}]$
-
-## Directory Structure
-
-- `data/`: Labels and pre-matched LLM perturbations.
-- `[model_name]/train.py`: Standalone scripts for training and Optuna tuning.
-- `model_registry.py`: Centralized input preparation and feature extraction logic.
-
-## Usage
-
-### Training
-To train a specific variant (e.g., the target-based flagship):
-```bash
-python stage1_idiom_signal/target_perturbation_mlp/train.py
-```
-
-### Inference
-
-* **Submission**: `stage1_idiom_signal_final/submission_inference/generate_scores.py`
-* **Internal**: `stage1_idiom_signal_final/train_inference/generate_scores.py`
-
-## Output Artifacts
-
-Each model saves:
-
-* `idiom_signal.pt`: Best seed weights.
-* `config.json`: Hyperparameters and metadata.
-* `metrics.json`: Per-seed and aggregate performance (F1, Accuracy, ROC-AUC).
+- **Tagged Sequence Formulation**: `[LANG=tr] <mwe>çürük elma</mwe> [MWE] çürük elma`
+- **Span Pooling Extraction**: Averages latent token states directly corresponding to character offsets of the target idiom.
+- **Perturbation Difference Calculation**: Vector distances computed against literal semantic substitutions:
+  $$V_{diff} = |V_{target} - V_{literal\_rewrite}|$$
+- **Unified Input Tensor**: The complete input vector maps target span embeddings alongside four distinct semantic alternatives:
+  $$V_{input} = [V_{target\_span} \,;\, V_{diff\_lexsub} \,;\, V_{diff\_compdrop} \,;\, V_{diff\_paraphrase} \,;\, V_{diff\_literal}]$$

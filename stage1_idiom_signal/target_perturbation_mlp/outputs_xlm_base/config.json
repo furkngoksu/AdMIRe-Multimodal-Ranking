@@ -1,0 +1,22 @@
+{
+  "model_name": "xlm-roberta-base",
+  "input_format": "Target Span-Pool + Perturbation Diffs",
+  "hyperparameters": {
+    "hidden_1": 1536,
+    "hidden_2": 512,
+    "dropout_1": 0.2,
+    "dropout_2": 0.1,
+    "lr": 0.001,
+    "weight_decay": 0.001,
+    "batch_size": 32
+  },
+  "final_seeds": [
+    42,
+    100,
+    150,
+    200,
+    250
+  ],
+  "optuna_epochs": 30,
+  "final_epochs": 40
+}

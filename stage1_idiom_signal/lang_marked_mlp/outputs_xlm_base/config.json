@@ -1,0 +1,23 @@
+{
+  "model_name": "xlm-roberta-base",
+  "max_length": 128,
+  "input_format": "[LANG] + <mwe>tagged</mwe> sentence + [MWE]",
+  "hyperparameters": {
+    "hidden_1": 512,
+    "hidden_2": 64,
+    "dropout_1": 0.30000000000000004,
+    "dropout_2": 0.2,
+    "lr": 0.0005,
+    "weight_decay": 0.01,
+    "batch_size": 16
+  },
+  "final_seeds": [
+    42,
+    100,
+    150,
+    200,
+    250
+  ],
+  "optuna_epochs": 30,
+  "final_epochs": 40
+}

@@ -49,18 +49,10 @@ def mean_pool(hidden_states, attention_mask):
     mask = attention_mask.unsqueeze(-1).float()
     return (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
 
-def split_train_val(labels: list[float], val_ratio: float, seed: int) -> tuple[list[int], list[int]]:
-    by_label = {}
-    for idx, lbl in enumerate(labels): by_label.setdefault(lbl, []).append(idx)
-    rng = random.Random(seed)
-    train_indices, val_indices = [], []
-    for group in by_label.values():
-        rng.shuffle(group)
-        val_count = max(1, round(len(group) * val_ratio))
-        val_indices.extend(group[:val_count])
-        train_indices.extend(group[val_count:])
-    rng.shuffle(train_indices); rng.shuffle(val_indices)
-    return train_indices, val_indices
+import sys
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from stage1_idiom_signal.model_registry import split_train_val_by_mwe
 
 def encode_matched_records(records: list[dict[str, Any]], model_name: str, max_length: int, device: torch.device) -> torch.Tensor:
     cache_dir = REPO_ROOT / "stage1_idiom_signal/cache"
@@ -105,19 +97,20 @@ def encode_matched_records(records: list[dict[str, Any]], model_name: str, max_l
     return res
 
 class FusionDataset(Dataset):
-    def __init__(self, pooled: torch.Tensor, labels: list[float]):
+    def __init__(self, pooled: torch.Tensor, labels: list[float], mwes: list[str]):
         pooled = pooled.float()
         h = pooled[:, 0]
         t = pooled[:, 1]
         # features = [h ; |t-p1| ; |t-p2| ; |t-p3| ; |t-p4|]
         self.features = torch.cat([h] + [torch.abs(t - pooled[:, i]) for i in range(2, 6)], dim=-1)
         self.labels = torch.tensor(labels, dtype=torch.float)
+        self.mwes = mwes
     def __len__(self): return len(self.labels)
     def __getitem__(self, idx): return self.features[idx], self.labels[idx]
 
 def train_single_seed(dataset, seed, device, hidden_1, hidden_2, dropout_1, dropout_2, lr, weight_decay, batch_size, epochs, save_path=None):
     set_seed(seed)
-    train_indices, val_indices = split_train_val(dataset.labels.tolist(), VAL_RATIO, seed)
+    train_indices, val_indices = split_train_val_by_mwe(dataset.mwes, dataset.labels.tolist(), VAL_RATIO, seed)
     train_loader = DataLoader(Subset(dataset, train_indices), batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(Subset(dataset, val_indices), batch_size=batch_size, shuffle=False)
     input_dim = dataset.features.size(-1)
@@ -131,12 +124,13 @@ def train_single_seed(dataset, seed, device, hidden_1, hidden_2, dropout_1, drop
     optimizer = torch.optim.AdamW(classifier.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = nn.BCEWithLogitsLoss()
     best_f1, best_epoch, best_metrics, best_state = -1.0, 0, None, None
+    patience, patience_counter = 5, 0
 
     for epoch in range(1, epochs + 1):
         classifier.train()
         for feats, lbls in train_loader:
             feats, lbls = feats.to(device), lbls.to(device)
-            optimizer.zero_grad(); loss = criterion(classifier(feats).squeeze(-1), lbls); loss.backward(); optimizer.step()
+            optimizer.zero_grad(); loss = criterion(classifier(feats).squeeze(-1), lbls); loss.backward(); torch.nn.utils.clip_grad_norm_(classifier.parameters(), max_norm=1.0); optimizer.step()
         
         classifier.eval(); all_logits, all_labels = [], []
         with torch.no_grad():
@@ -154,6 +148,11 @@ def train_single_seed(dataset, seed, device, hidden_1, hidden_2, dropout_1, drop
             best_f1, best_epoch = f1, epoch
             best_metrics = {"f1": f1, "accuracy": accuracy_score(lbls, preds)}
             if save_path: best_state = {k: v.cpu().clone() for k, v in classifier.state_dict().items()}
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                break
             
     if save_path and best_state:
         torch.save({"classifier_state_dict": best_state, "input_dim": input_dim, "hyperparameters": {"hidden_1": hidden_1, "hidden_2": hidden_2, "dropout_1": dropout_1, "dropout_2": dropout_2}, "seed": seed, "best_epoch": best_epoch, "metrics": best_metrics}, save_path)
@@ -173,7 +172,8 @@ def main():
     set_seed(OPTUNA_SEEDS[0]); OUTPUT_DIR.mkdir(parents=True, exist_ok=True); device = get_device()
     with MATCHED_PATH.open("r", encoding="utf-8") as f: records = json.load(f)
     labels = [float(r["label"]) for r in records]
-    pooled = encode_matched_records(records, MODEL_NAME, MAX_LENGTH, device); dataset = FusionDataset(pooled, labels)
+    mwes = [r["mwe"] for r in records]
+    pooled = encode_matched_records(records, MODEL_NAME, MAX_LENGTH, device); dataset = FusionDataset(pooled, labels, mwes)
     study = optuna.create_study(direction="maximize"); study.optimize(lambda t: objective(t, dataset, device), n_trials=N_TRIALS)
     best_params = study.best_trial.params
     per_seed = [train_single_seed(dataset, s, device, epochs=FINAL_EPOCHS, **best_params) for s in FINAL_SEEDS]
