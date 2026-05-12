@@ -1,0 +1,22 @@
+{
+  "model_name": "xlm-roberta-base",
+  "input_format": "Lang+Marked Context + Perturbation Diffs",
+  "hyperparameters": {
+    "hidden_1": 512,
+    "hidden_2": 128,
+    "dropout_1": 0.6,
+    "dropout_2": 0.4,
+    "lr": 5e-05,
+    "weight_decay": 0.01,
+    "batch_size": 32
+  },
+  "final_seeds": [
+    42,
+    100,
+    150,
+    200,
+    250
+  ],
+  "optuna_epochs": 30,
+  "final_epochs": 40
+}

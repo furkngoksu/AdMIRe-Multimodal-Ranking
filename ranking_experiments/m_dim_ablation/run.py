@@ -32,7 +32,7 @@ LEARNABLE_LOGIT_SCALE = True
 BASE_DIR = project_root / "ranking_experiments/m_dim_ablation"
 
 SEEDS = (7, 13, 21, 42, 100)
-M_DIMS = (0, 8, 16, 32, 64, 128, 256)
+M_DIMS = (0, 8, 16, 32, 64, 128, 256, 512, 1024)
 
 
 def load_cache():

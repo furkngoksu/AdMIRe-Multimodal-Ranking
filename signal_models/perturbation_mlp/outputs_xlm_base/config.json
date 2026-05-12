@@ -1,0 +1,22 @@
+{
+  "model_name": "xlm-roberta-base",
+  "input_format": "Pure Perturbation Diffs",
+  "hyperparameters": {
+    "hidden_1": 256,
+    "hidden_2": 128,
+    "dropout_1": 0.5,
+    "dropout_2": 0.6,
+    "lr": 5e-05,
+    "weight_decay": 0.005,
+    "batch_size": 16
+  },
+  "final_seeds": [
+    42,
+    100,
+    150,
+    200,
+    250
+  ],
+  "optuna_epochs": 30,
+  "final_epochs": 40
+}

@@ -1,0 +1,41 @@
+{
+    "cache_path": "/Users/furkangoksu/Desktop/nlpproject/src/ranking/output/admire_rank_cache.pt",
+    "m_scores_path": "/Users/furkangoksu/Desktop/nlpproject/signal_inference/admire_train_scores.tsv",
+    "m_used_for_training": "predicted m_prob",
+    "ranking_model_config": {
+        "query_dim": 512,
+        "query_dropout": 0.1,
+        "fusion_type": "film_full",
+        "m_embedding_dim": 512,
+        "logit_scale_learnable": true
+    },
+    "best_params": {
+        "batch_size": 16,
+        "learning_rate": 9.911622141429196e-05,
+        "weight_decay": 0.01
+    },
+    "best_seed": 42,
+    "mean_dev_ndcg": 0.802054476737976,
+    "dev_scores": {
+        "42": 0.8151967525482178,
+        "100": 0.8130217492580414,
+        "150": 0.7756631374359131,
+        "200": 0.7967630326747894,
+        "250": 0.8096277117729187
+    },
+    "best_dev": {
+        "loss": 1.582402765750885,
+        "top1": 0.5208333432674408,
+        "ndcg": 0.8151967525482178
+    },
+    "test": {
+        "loss": 1.5856313109397888,
+        "top1": 0.2291666716337204,
+        "ndcg": 0.7812795341014862
+    },
+    "xeval": {
+        "loss": 1.734993815422058,
+        "top1": 0.1619318187236786,
+        "ndcg": 0.7127418279647827
+    }
+}
