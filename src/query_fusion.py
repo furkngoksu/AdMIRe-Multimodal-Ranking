@@ -115,12 +115,11 @@ class FiLMScaleQueryFusion(BaseQueryFusion):
             self.gamma_net.bias.zero_()
 
     def forward(self, query_repr: torch.Tensor, idiom_prob: torch.Tensor) -> torch.Tensor:
+        if self.config.m_embedding_dim == 0:
+            return F.normalize(query_repr, p=2, dim=-1)
+
         idiom_input = 2.0 * idiom_prob.float() - 1.0
-        
-        if self.m_embedding is not None:
-            m_feat = self.m_embedding(idiom_input)
-        else:
-            m_feat = idiom_input
+        m_feat = self.m_embedding(idiom_input)
 
         gamma = self.gamma_net(m_feat)
         enriched_query = (1.0 + gamma) * query_repr
