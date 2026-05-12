@@ -8,11 +8,11 @@ from pathlib import Path
 MODEL_ROOT = Path(__file__).resolve().parent
 
 ALL_MODELS = [
-    "baseline",
-    "marked_simple",
-    "marked_mlp",
+    "baseline_mlp",
+    "lang_marked_mlp",
+    "lang_marked_perturbation_mlp",
     "perturbation_mlp",
-    "fusion_mlp",
+    "target_perturbation_mlp",
 ]
 
 
