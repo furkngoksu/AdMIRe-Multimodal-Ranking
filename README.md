@@ -30,13 +30,13 @@ Developed for the **AdMIRe 2 image-and-text ranking task** as an NLP team projec
 
 ![Original project architecture diagram](docs/assets/pipeline.png)
 
-The diagram records the original design, including CLIP/SigLIP alternatives. The current implementation uses `xlm-roberta-base`, `clip-ViT-B-32`, and `clip-ViT-B-32-multilingual-v1`. Image and caption embeddings are combined through gated fusion; candidates are ranked using scaled cosine similarity.
+The implementation uses `xlm-roberta-base` for text, `clip-ViT-B-32` for images, and `clip-ViT-B-32-multilingual-v1` for captions. Image and caption embeddings are combined through gated fusion, and candidates are ranked by scaled cosine similarity.
 
 The final training script combines a listwise objective with top-choice cross-entropy. See [experiment notes](docs/EXPERIMENTS.md) for the distinction between the final pipeline and the ablation studies.
 
-## 📊 Recorded results
+## 📊 Results
 
-The saved final-training summary contains the following local evaluation results:
+Local evaluation results of the selected final-training run:
 
 | Split | Top-1 accuracy | nDCG@5 |
 | --- | ---: | ---: |
@@ -44,7 +44,7 @@ The saved final-training summary contains the following local evaluation results
 | Test | 34.38% | 0.7958 |
 | Cross-evaluation | 14.38% | 0.7121 |
 
-These are the recorded results for the selected run, not official shared-task leaderboard scores. Mean development nDCG across five final-training seeds was **0.7894**. The [saved summary](src/ranking/output/training_summary.json) provides the configuration and per-seed values; the experiments have not been rerun during repository cleanup.
+Mean development nDCG across five seeds is **0.7894**. These are local evaluation scores, not official leaderboard results. The [training summary](docs/assets/training_summary.json) lists the configuration and per-seed values.
 
 ## 📁 Repository
 
@@ -59,15 +59,14 @@ These are the recorded results for the selected run, not official shared-task le
 
 ## 🚀 Running the project
 
-Start with the [setup guide](docs/SETUP.md). This repository provides training and evaluation code. Prepared rewrite records and idiomaticity scores are included; the original AdMIRe datasets and images must be supplied separately. Training produces the checkpoints used for inference.
-
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python -m src.ranking.train
 ```
 
-The repository includes the research implementation, experiment notebooks, and recorded metrics.
+Prepared LLM rewrites and idiomaticity scores are included. The AdMIRe 2 datasets and images are distributed separately by the task organizers. See the [setup guide](docs/SETUP.md) for the full pipeline: idiomaticity models, ranking training, ablations, and submission generation.
 
 ## 🤝 Team
 
@@ -75,4 +74,4 @@ The repository includes the research implementation, experiment notebooks, and r
 
 Istanbul Technical University — YZV405E
 
-This portfolio copy is based on the team's original repository and retains its Git history. The included PDF is the project proposal; no publication or acceptance status is implied.
+Originally developed in the [team repository](https://github.com/Deniztpl/YZV405E_2526_Sisli).

@@ -13,7 +13,7 @@ Run commands from the repository root. Use Python 3.10 or later and install `req
 | LLM rewrites for ranking splits | `llm_results_training/*.jsonl` |
 | LLM rewrites for submission inputs | `llm_results_submission/*.jsonl` |
 
-The original AdMIRe dataset folders are external inputs. Prepared records, LLM rewrites, and previously generated score TSVs are retained in this copy. Consult `src/config.py` for the exact TSV filenames and split paths. The idiomaticity training scripts consume prepared records; a complete raw-dataset-to-records preparation workflow is not supplied here. The original local project also retains all generated files.
+The AdMIRe 2 dataset folders are external inputs. Prepared idiomaticity records, LLM rewrites, and generated score TSVs are included in the repository. See `src/config.py` for the exact TSV filenames and split paths.
 
 ## Idiomaticity models
 
@@ -58,8 +58,8 @@ After providing submission data, submission idiomaticity scores, and the trained
 python -m src.run_submission
 ```
 
-Outputs are written under `final_submission/`. Generating an archive does not submit it to the competition.
+Outputs are written under `final_submission/`.
 
 ## Optional rewrite generation
 
-`perturbation/pipeline.py` contains callable generation utilities rather than a complete dataset command-line runner. It uses external LLM providers. Review its dispatcher, environment-variable requirements, and model routes before calling it; generation sends the supplied text to those providers and can incur API charges. No API calls were made during cleanup.
+`perturbation/pipeline.py` provides the rewrite and semantic-feature generation utilities. It routes requests to DeepSeek and to Gemini 2.5 Flash via OpenRouter, so `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY` must be set. Generation incurs API usage costs.
