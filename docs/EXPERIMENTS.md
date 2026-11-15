@@ -4,7 +4,7 @@
 
 `src/ranking/train.py` uses predicted idiomaticity probabilities, gated image–caption fusion, full FiLM query fusion, and a 512-dimensional signal embedding. The loss is 0.3 × listwise cross-entropy plus 0.7 × top-choice cross-entropy. Hyperparameters are selected with 30 Optuna trials, followed by runs with seeds 42, 100, 150, 200, and 250.
 
-The [training summary](assets/training_summary.json) selects seed 42 and reports development, test, and cross-evaluation metrics from local evaluation.
+The [training summary](../src/ranking/output/training_summary.json) records the configuration, selected hyperparameters and per-seed scores of a final-training run. The five-seed results reported in the README come from the [final report](report.pdf).
 
 ## Ablation studies
 

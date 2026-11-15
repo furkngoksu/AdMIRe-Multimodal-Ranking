@@ -2,62 +2,105 @@
 
 # 🧩 Idiomaticity-Aware Multimodal Ranking
 
-**Matching expressions to images by their meaning in context.**
+**Ranking images by what an expression means in context, across 15 languages.**
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![Transformers](https://img.shields.io/badge/Transformers-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)
-![Multimodal NLP](https://img.shields.io/badge/Multimodal-NLP-6554C0?style=for-the-badge)
+![CLIP](https://img.shields.io/badge/CLIP-412991?style=for-the-badge)
+![Optuna](https://img.shields.io/badge/Optuna-2C5BB4?style=for-the-badge)
 
-[![Project Proposal](https://img.shields.io/badge/Project-Proposal-3467A1?style=for-the-badge)](docs/proposal.pdf)
-[![Original Repository](https://img.shields.io/badge/Original-Team_Repository-181717?style=for-the-badge&logo=github)](https://github.com/Deniztpl/YZV405E_2526_Sisli)
+[![Report](https://img.shields.io/badge/Final-Report-B31B1B?style=for-the-badge&logo=adobeacrobatreader&logoColor=white)](docs/report.pdf)
+[![Proposal](https://img.shields.io/badge/Project-Proposal-3467A1?style=for-the-badge)](docs/proposal.pdf)
 
 </div>
 
-An expression such as *spill the beans* can describe a physical action or mean revealing a secret. This project uses the surrounding sentence, candidate images, and their captions to rank the interpretation that fits the context.
+---
 
-Developed for the **AdMIRe 2 image-and-text ranking task** as an NLP team project at **Istanbul Technical University**, the system combines multilingual text representations, vision–language embeddings, and a learned idiomaticity signal. Each query is matched against five image–caption candidates.
+*"After weeks of secrecy, John finally **spilled the beans** about the surprise party."*
 
-## ✨ Approach
+Shown five images, a model has to decide whether this sentence is about beans on a floor or about revealing a secret. This project tackles that problem for the **AdMIRe 2 shared task (Subtask 1, Image & Text)**: given a sentence containing a potentially idiomatic expression, rank five image–caption candidates by how well they depict its meaning in context.
 
-- **Multilingual text understanding:** XLM-RoBERTa represents both the sentence and the target expression.
-- **Vision–language matching:** CLIP image embeddings and multilingual caption embeddings represent the candidates.
-- **LLM-generated semantic perturbations:** Rewrites help estimate whether an expression is literal or idiomatic.
-- **Learned fusion:** Concatenation, gating, and FiLM variants combine the idiomaticity signal with the query representation.
-- **Ranking experiments:** The project compares fusion strategies, signal dimensions, and training losses, with Optuna-based tuning in the final training pipeline.
+The model is trained on English and Portuguese and evaluated on **15 languages**, including Turkish, Chinese, Georgian, Igbo and Kazakh, most of which it never sees during training.
+
+## ✨ Highlights
+
+- **Two-stage architecture:** a dedicated idiomaticity model produces a continuous signal that conditions the ranking model.
+- **LLM-generated semantic perturbations:** every sentence is rewritten four ways (lexical substitution, component drop, literalization, paraphrase), and the embedding differences reveal how idiomatic the expression is.
+- **FiLM-conditioned query:** the idiomaticity signal scales and shifts the query embedding before matching.
+- **Multilingual and multimodal:** XLM-RoBERTa for text and CLIP for images and captions, combined with gated fusion.
+- **Systematic ablations:** five idiomaticity classifiers, four fusion strategies and seven signal sizes, each evaluated over five seeds.
 
 ## 🏗️ Architecture
 
-![Original project architecture diagram](docs/assets/pipeline.png)
+![System architecture](docs/assets/pipeline.png)
 
-The implementation uses `xlm-roberta-base` for text, `clip-ViT-B-32` for images, and `clip-ViT-B-32-multilingual-v1` for captions. Image and caption embeddings are combined through gated fusion, and candidates are ranked by scaled cosine similarity.
+### Stage 1 · Idiomaticity signal
 
-The final training script combines a listwise objective with top-choice cross-entropy. See [experiment notes](docs/EXPERIMENTS.md) for the distinction between the final pipeline and the ablation studies.
+<p align="center">
+  <img src="docs/assets/idiomaticity_signal.png" width="90%" alt="Computing the idiomaticity signal for a Turkish example">
+</p>
+
+An LLM (DeepSeek or Gemini 2.5 Flash, routed by language) rewrites each sentence in four controlled ways. Each rewrite is verified by deterministic checks, plus an LLM-as-judge step for literalization. The original sentence and its rewrites are encoded with XLM-RoBERTa, and the absolute embedding differences form the perturbation features.
+
+Five classifiers trained on SemEval-2022 Task 2 are compared. The strongest one pools the target-expression tokens and combines them with the perturbation features. Its sigmoid output is the idiomaticity score **M**, which stays frozen during ranking.
+
+### Stage 2 · Multimodal ranking
+
+| Component | Design |
+| --- | --- |
+| **Query** | XLM-RoBERTa sentence and target-span embeddings, concatenated and projected to 512 dimensions |
+| **Idiomaticity conditioning** | Full FiLM: `Q' = L2Norm((1 + γ) ⊙ Q + β)`, with γ and β predicted from M |
+| **Candidates** | Frozen CLIP ViT-B/32 image and multilingual CLIP caption embeddings, combined with a learned gate |
+| **Scoring** | Cosine similarity with a learnable temperature |
+| **Objective** | Listwise cross-entropy combined with top-choice cross-entropy, tuned with Optuna |
 
 ## 📊 Results
 
-Local evaluation results of the selected final-training run:
+### Final system
 
-| Split | Top-1 accuracy | nDCG@5 |
+Five-seed mean on the AdMIRe 2025 English and Portuguese splits and on the 13 languages unseen during training:
+
+| Split | Top-1 accuracy | nDCG |
 | --- | ---: | ---: |
-| Development | 48.96% | 0.8123 |
-| Test | 34.38% | 0.7958 |
-| Cross-evaluation | 14.38% | 0.7121 |
+| Development (EN, PT) | 43.00% | 85.65% |
+| Test (EN, PT) | 40.05% | 82.46% |
+| Cross-lingual (13 unseen languages) | 35.01% | 73.00% |
 
-Mean development nDCG across five seeds is **0.7894**. These are local evaluation scores, not official leaderboard results. The [training summary](docs/assets/training_summary.json) lists the configuration and per-seed values.
+### What each component contributes
+
+<p align="center">
+  <img src="docs/assets/idiomaticity_models.png" width="85%" alt="Idiomaticity classifier comparison">
+</p>
+
+Pooling over the target expression and adding perturbation features raises validation F1 from **70.4%** to **80.0%**. Perturbation features alone are weak, but they complement contextual representations.
+
+<p align="center">
+  <img src="docs/assets/query_fusion.png" width="85%" alt="Query fusion strategies">
+</p>
+
+FiLM with both scale and shift gives the best development and test nDCG and the highest Top-1 accuracy, so it is used in the final system.
+
+<p align="center">
+  <img src="docs/assets/signal_dimension.png" width="85%" alt="Effect of idiomaticity signal size on cross-lingual nDCG">
+</p>
+
+Conditioning on idiomaticity improves cross-lingual nDCG from **69.1%** to **79.4%**. The gain is largest on languages the model has never seen.
+
+Detailed results are in the [final report](docs/report.pdf), the [experiment notes](docs/EXPERIMENTS.md) and the notebooks in [`signal_models/`](signal_models/) and [`ranking_experiments/`](ranking_experiments/).
 
 ## 📁 Repository
 
 | Directory | Contents |
 | --- | --- |
-| [`src/`](src/) | Encoders, fusion modules, ranking training, and submission generation |
-| [`signal_models/`](signal_models/) | Five idiomaticity classifier variants and saved experiment metrics |
-| [`signal_inference/`](signal_inference/) | Generation of idiomaticity scores for ranking data |
-| [`perturbation/`](perturbation/) | LLM-based rewrite and semantic-feature generation |
-| [`ranking_experiments/`](ranking_experiments/) | Fusion, signal-dimension, and loss ablations |
-| [`docs/`](docs/) | Setup, experiments, proposal, and architecture diagram |
+| [`perturbation/`](perturbation/) | LLM rewrite generation and verification |
+| [`signal_models/`](signal_models/) | Five idiomaticity classifiers, saved metrics and comparison notebook |
+| [`signal_inference/`](signal_inference/) | Idiomaticity scores for the ranking data |
+| [`src/`](src/) | Encoders, fusion modules, ranking training and submission generation |
+| [`ranking_experiments/`](ranking_experiments/) | Fusion, signal-dimension and loss ablations |
+| [`docs/`](docs/) | Report, proposal, setup guide and experiment notes |
 
-## 🚀 Running the project
+## 🚀 Getting started
 
 ```bash
 python -m venv .venv
@@ -66,12 +109,14 @@ pip install -r requirements.txt
 python -m src.ranking.train
 ```
 
-Prepared LLM rewrites and idiomaticity scores are included. The AdMIRe 2 datasets and images are distributed separately by the task organizers. See the [setup guide](docs/SETUP.md) for the full pipeline: idiomaticity models, ranking training, ablations, and submission generation.
+Prepared LLM rewrites and idiomaticity scores are included. The AdMIRe 2 images and annotations are distributed by the task organizers. The [setup guide](docs/SETUP.md) covers the full pipeline: idiomaticity models, ranking training, ablations and submission generation.
 
 ## 🤝 Team
 
-**Deniz Topal · Furkan Yasir Goksu · Faruk Akyol**
+<div align="center">
 
-Istanbul Technical University — YZV405E
+**Deniz Topal · Furkan Yasir Göksu · Faruk Akyol**
 
-Originally developed in the [team repository](https://github.com/Deniztpl/YZV405E_2526_Sisli).
+Istanbul Technical University · YZV405E Natural Language Processing · Spring 2026
+
+</div>
