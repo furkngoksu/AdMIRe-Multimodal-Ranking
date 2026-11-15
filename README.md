@@ -41,19 +41,35 @@ The model is trained on English and Portuguese and evaluated on **15 languages**
   <img src="docs/assets/idiomaticity_signal.png" width="90%" alt="Computing the idiomaticity signal for a Turkish example">
 </p>
 
-An LLM (DeepSeek or Gemini 2.5 Flash, routed by language) rewrites each sentence in four controlled ways. Each rewrite is verified by deterministic checks, plus an LLM-as-judge step for literalization. The original sentence and its rewrites are encoded with XLM-RoBERTa, and the absolute embedding differences form the perturbation features.
+An LLM (DeepSeek or Gemini 2.5 Flash, routed by language) rewrites each sentence in four controlled ways: lexical substitution, component drop, literalization and a meaning-preserving paraphrase. Each rewrite is verified by deterministic checks, plus an LLM-as-judge step for literalization.
 
-Five classifiers trained on SemEval-2022 Task 2 are compared. The strongest one pools the target-expression tokens and combines them with the perturbation features. Its sigmoid output is the idiomaticity score **M**, which stays frozen during ranking.
+The original sentence $t$ and its rewrites (paraphrase $p$, substitution $l$, component drop $c$, literalization $r$) are encoded with XLM-RoBERTa. Their absolute embedding differences form the perturbation features:
+
+```math
+x_{\text{pert}} = \big[\, |t-p| \,;\, |t-l| \,;\, |t-c| \,;\, |t-r| \,\big]
+```
+
+Five classifiers trained on SemEval-2022 Task 2 are compared. The strongest one pools the target-expression tokens and combines them with $x_{\text{pert}}$. Its sigmoid output is the idiomaticity score $M \in [0, 1]$, which stays frozen during ranking.
 
 ### Stage 2 · Multimodal ranking
 
 | Component | Design |
 | --- | --- |
 | **Query** | XLM-RoBERTa sentence and target-span embeddings, concatenated and projected to 512 dimensions |
-| **Idiomaticity conditioning** | Full FiLM: `Q' = L2Norm((1 + γ) ⊙ Q + β)`, with γ and β predicted from M |
+| **Idiomaticity conditioning** | Full FiLM, with scale $\gamma$ and shift $\beta$ predicted from $M$ |
 | **Candidates** | Frozen CLIP ViT-B/32 image and multilingual CLIP caption embeddings, combined with a learned gate |
 | **Scoring** | Cosine similarity with a learnable temperature |
 | **Objective** | Listwise cross-entropy combined with top-choice cross-entropy, tuned with Optuna |
+
+The idiomaticity signal conditions the query $Q$, and a learned gate $g_j$ balances the image $I_j$ and caption $T_j$ of each candidate:
+
+```math
+Q' = \mathrm{L2Norm}\big((1 + \gamma) \odot Q + \beta\big)
+\qquad
+C_j = \mathrm{L2Norm}\big(g_j \odot I_j + (1 - g_j) \odot T_j\big)
+```
+
+Candidates are ranked by $\cos(Q', C_j)$.
 
 ## 📊 Results
 
