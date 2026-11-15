@@ -13,7 +13,7 @@ Run commands from the repository root. Use Python 3.10 or later and install `req
 | LLM rewrites for ranking splits | `llm_results_training/*.jsonl` |
 | LLM rewrites for submission inputs | `llm_results_submission/*.jsonl` |
 
-These paths describe external inputs, not bundled folders. Consult `src/config.py` for the exact TSV filenames and split paths. The idiomaticity training scripts consume prepared records; a complete raw-dataset-to-records preparation workflow is not supplied here. The original local project retains its data and generated files.
+The original AdMIRe dataset folders are external inputs. Prepared records, LLM rewrites, and previously generated score TSVs are retained in this copy. Consult `src/config.py` for the exact TSV filenames and split paths. The idiomaticity training scripts consume prepared records; a complete raw-dataset-to-records preparation workflow is not supplied here. The original local project also retains all generated files.
 
 ## Idiomaticity models
 

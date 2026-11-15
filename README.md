@@ -59,7 +59,7 @@ These are the recorded results for the selected run, not official shared-task le
 
 ## 🚀 Running the project
 
-Start with the [setup guide](docs/SETUP.md). Training requires the external datasets and prepared rewrite records; inference also requires trained checkpoints. These are not bundled with this source repository.
+Start with the [setup guide](docs/SETUP.md). This repository provides training and evaluation code. Prepared rewrite records and idiomaticity scores are included; the original AdMIRe datasets and images must be supplied separately. Training produces the checkpoints used for inference.
 
 ```bash
 python -m venv .venv
@@ -67,11 +67,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The repository preserves the research implementation and experiment notebooks. It is not a pretrained, ready-to-run demo.
+The repository includes the research implementation, experiment notebooks, and recorded metrics.
 
 ## 🤝 Team
 
-**Deniz Topal · Furkan Yasir Goksu · Faruk Akyol**  
+**Deniz Topal · Furkan Yasir Goksu · Faruk Akyol**
+
 Istanbul Technical University — YZV405E
 
 This portfolio copy is based on the team's original repository and retains its Git history. The included PDF is the project proposal; no publication or acceptance status is implied.

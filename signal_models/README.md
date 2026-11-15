@@ -18,4 +18,4 @@ From the repository root, after preparing the inputs described in the [setup gui
 python signal_models/run_all_models.py target_perturbation_mlp
 ```
 
-Omit the model argument to train all five variants. Saved configuration, history, and metric JSON files document earlier runs; model checkpoints and input records are not bundled.
+Omit the model argument to train all five variants. Saved configuration, history, and metric JSON files document earlier runs; prepared input records are retained under `data/`, and training produces model checkpoints.

@@ -14,10 +14,6 @@ __pycache__/
 # External datasets and generated rewrites
 admire2_training/
 admire2_submission/
-signal_models/data/
-llm_results_training/
-llm_results_submission/
-signal_inference/*.tsv
 
 # Generated artifacts
 *.pt
